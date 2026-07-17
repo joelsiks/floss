@@ -1,3 +1,5 @@
+#ifndef INCLUDE_UART
+#define INCLUDE_UART
 
 #include <stdint.h>
 
@@ -7,3 +9,5 @@ namespace UART {
 
   char pl011_recv();
 };
+
+#endif // INCLUDE_UART

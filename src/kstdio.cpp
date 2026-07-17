@@ -1,0 +1,63 @@
+
+#include <cstdarg>
+
+#include "kstdio.h"
+#include "uart.h"
+
+static void kprintf_print_number(int number) {
+  char number_buf[10];
+
+  // Exit early if number is zero
+  if (number == 0) {
+    UART::pl011_send_char('0');
+    return;
+  }
+
+  // Handle negative numbers
+  if (number < 0) {
+    UART::pl011_send_char('-');
+    number *= -1;
+  }
+
+  int max_idx = 0;
+
+  while (number != 0) {
+    number_buf[max_idx] = '0' + (number % 10);
+    number /= 10;
+    max_idx++;
+  }
+
+  for (int i = max_idx - 1; i >= 0; i--) {
+    UART::pl011_send_char(number_buf[i]);
+  }
+}
+
+void kprintf(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+
+  const char* current = format;
+  while (*current != '\0') {
+    // If we encounter a '%' and the next character is not the null-terminator,
+    // then the next character is the format. We are not supporting escaped
+    // percentage signs here.
+    if (*current == '%') {
+      const char specifier = *(current + 1);
+
+      if (specifier != '\0') {
+        if (specifier == 'd') {
+          const int number = va_arg(args, int);
+          kprintf_print_number(number);
+        } else if (specifier == 'p') {
+          const void* number = va_arg(args, void*);
+        }
+
+        current++;
+      }
+    } else {
+      UART::pl011_send_char(*current);
+    }
+
+    current++;
+  }
+}

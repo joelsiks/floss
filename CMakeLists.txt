@@ -29,11 +29,12 @@ add_link_options(
 )
 
 # --- Kernel image ------------------------------------------------------------
-add_executable(floss_kernel
-    src/start.S
-    src/kernel.cpp
-    src/uart.cpp
+file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.S
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c
 )
+add_executable(floss_kernel ${KERNEL_SOURCES})
 target_link_options(floss_kernel PRIVATE
     -T ${CMAKE_SOURCE_DIR}/linker/aarch64.ld
 )

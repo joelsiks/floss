@@ -33,3 +33,4 @@ exec qemu-system-aarch64 \
     -no-reboot \
     -gdb tcp::1234 \
     -kernel "$KERNEL"
+

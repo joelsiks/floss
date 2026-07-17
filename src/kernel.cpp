@@ -1,9 +1,11 @@
 
-#include <stdbool.h>
+#include <cstdarg>
+#include <cstdbool>
 
-#include "uart.h"
+#include "kstdio.h"
 
 extern "C" void kern_main(void) {
-  UART::pl011_send_str("Hello, World!");
-  UART::pl011_send_char(UART::pl011_recv());
+  kprintf("Hello %d\n", 3);
+  kprintf("Hello %d\n", 32);
+  kprintf("Hello %d\n", -1234);
 }
