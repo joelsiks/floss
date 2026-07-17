@@ -1,0 +1,15 @@
+# Build directories
+/build/
+/build-*/
+
+# Common build artifacts
+*.elf
+*.bin
+*.img
+*.o
+*.a
+
+# CMake / tooling
+compile_commands.json
+.cache/
+.vscode/
