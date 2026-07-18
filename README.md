@@ -17,7 +17,9 @@ sudo apt install gcc-aarch64-linux-gnu cmake qemu-system-aarch64
 Configure once (note the toolchain file):
 
 ```sh
-cmake -B build -S . -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake
+cmake -B build -S . -G "Unix Makefiles" \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 ```
 
 Then build with:
