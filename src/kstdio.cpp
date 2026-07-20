@@ -4,7 +4,8 @@
 #include "kstdio.h"
 #include "uart.h"
 
-static void kprintf_print_number(int number) {
+template <typename T>
+static void kprintf_print_number(T number, int base) {
   char number_buf[10];
 
   // Exit early if number is zero
@@ -22,8 +23,15 @@ static void kprintf_print_number(int number) {
   int max_idx = 0;
 
   while (number != 0) {
-    number_buf[max_idx] = '0' + (number % 10);
-    number /= 10;
+    const int remainder = number % base;
+
+    if (remainder < 10) {
+      number_buf[max_idx] = '0' + remainder;
+    } else {
+      number_buf[max_idx] = 'a' + remainder - 10;
+    }
+
+    number /= base;
     max_idx++;
   }
 
@@ -47,14 +55,17 @@ void kprintf(const char* format, ...) {
       if (specifier != '\0') {
         if (specifier == 'd') {
           const int number = va_arg(args, int);
-          kprintf_print_number(number);
+          kprintf_print_number(number, 10);
         } else if (specifier == 'p') {
           const void* number = va_arg(args, void*);
+          UART::pl011_send_str("0x");
+          kprintf_print_number((uint64_t)number, 16);
         }
 
         current++;
       }
     } else {
+      // Normal case, just send the character
       UART::pl011_send_char(*current);
     }
 

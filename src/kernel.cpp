@@ -1,11 +1,8 @@
 
-#include <cstdarg>
-#include <cstdbool>
-
 #include "kstdio.h"
+#include "exception.h"
 
 extern "C" void kern_main(void) {
-  kprintf("Hello %d\n", 3);
-  kprintf("Hello %d\n", 32);
-  kprintf("Hello %d\n", -1234);
+  const uint64_t el = Exception::get_exception_level();
+  kprintf("Exception Level: %d\n", el);
 }

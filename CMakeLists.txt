@@ -56,3 +56,16 @@ add_custom_target(run
     COMMENT "Booting floss_kernel under QEMU (virt / cortex-a53)"
 )
 add_dependencies(run floss_kernel)
+
+# `cmake --build build --target run-debug` boots the kernel paused (-S) and,
+# when run inside tmux, opens a gdb pane that attaches to QEMU's gdbserver on
+# :1234. FLOSS_GDB=1 (set below) enables the pane; otherwise it prints a hint.
+add_custom_target(run-debug
+    COMMAND ${CMAKE_COMMAND} -E env FLOSS_GDB=1
+            ${CMAKE_SOURCE_DIR}/scripts/run-qemu.sh
+            ${CMAKE_BINARY_DIR}/floss_kernel -S
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    USES_TERMINAL
+    COMMENT "Booting floss_kernel under QEMU, paused (-S) with gdb in a tmux pane"
+)
+add_dependencies(run-debug floss_kernel)

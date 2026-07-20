@@ -24,6 +24,14 @@ _start:
   b     .clear_bss
   .clear_bss_done:
 
+  # Setup the exceptions, mask in DAIF and table in VBAR (Vector Base Address Register)
+  msr   DAIF, xzr
+  ldr   x0, =vector_table
+  msr   VBAR_EL1, x0
+  isb
+
+  udf   #123
+
   # Enter the kernel
   bl    kern_main
 
