@@ -36,7 +36,21 @@ struct ExceptionFrame {
   uint64_t xzr;
 };
 
-extern "C" void Exception::exception_handler(ExceptionFrame* frame_ptr) {
+extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
+
+  // We should read the ESR_EL1 (exception syndrome register) to figure out
+  // what kind of exception has occurred.
+
+  uint64_t syndrome = 0;
+  asm ("mrs %0, ESR_EL1" : "=r" (syndrome));
+
+  // bits [31, 26] represent the "exception class", i.e., what kind of exception
+  // has occurred.
+  const uint64_t ec = (syndrome >> 26) & 0b111111;
+  const bool bad_ec = ec == 0;
+
+  kprintf("The EC is: %d\n", ec);
+
   kprintf("\nGot an exception: %p\n", frame_ptr);
   kprintf("Register dump:\n");
   kprintf("  x0:  %p\n", frame_ptr->x0);
@@ -61,4 +75,6 @@ extern "C" void Exception::exception_handler(ExceptionFrame* frame_ptr) {
   kprintf("  x29: %p\n", frame_ptr->x29);
   kprintf("  x30: %p\n", frame_ptr->x30);
   kprintf("  xzr: %p\n", frame_ptr->xzr);
+
+  return bad_ec;
 }

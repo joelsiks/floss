@@ -3,6 +3,9 @@
 
 .global vector_table
 
+halt:
+  b .
+
 # The entry saves/dumps the caller-saved registers to the stack, so that the
 # exception handler (implemented in C++) can read the contents
 exception_entry:
@@ -19,13 +22,11 @@ exception_entry:
   stp   x18, x29, [sp, #144]
   stp   x30, xzr, [sp, #160]
 
-  mrs   x0, ELR_EL1
-  add   x0, x0, #4
-  msr   ELR_EL1, x0
-
   mov   x0, sp
   bl    exception_handler
+  tbnz  x0, #0, .Lpanic
 
+.Lrestore_saved_regs:
   ldp   x0, x1, [sp, #0]
   ldp   x2, x3, [sp, #16]
   ldp   x4, x5, [sp, #32]
@@ -38,8 +39,10 @@ exception_entry:
   ldp   x18, x29, [sp, #144]
   ldp   x30, xzr, [sp, #160]
   add   sp, sp, #192
-
   eret
+
+.Lpanic:
+  b halt
 
 .macro vector label
 .p2align 7
