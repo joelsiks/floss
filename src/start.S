@@ -30,7 +30,11 @@ _start:
   msr   VBAR_EL1, x0
   isb
 
-  udf   #123
+  # Program the Generic Timer
+  mrs   x0, CNTFRQ_EL0
+  msr   CNTP_CTL_EL0, x0
+  mov   x0, #20000
+  msr   CNTP_TVAL_EL0, x0
 
   # Enter the kernel
   bl    kern_main

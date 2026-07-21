@@ -24,7 +24,7 @@ exception_entry:
 
   mov   x0, sp
   bl    exception_handler
-  tbnz  x0, #0, .Lpanic
+  cbnz  x0, .Lpanic
 
 .Lrestore_saved_regs:
   ldp   x0, x1, [sp, #0]

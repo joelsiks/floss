@@ -44,7 +44,7 @@ fi
 # Any extra args passed to this script are forwarded to QEMU, e.g.
 #   ./scripts/run-qemu.sh build/floss_kernel -S   # pause at startup for gdb
 exec qemu-system-aarch64 \
-    -M virt \
+    -M virt,gic-version=3 \
     -cpu cortex-a53 \
     -m 128M \
     -nographic \

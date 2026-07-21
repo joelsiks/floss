@@ -40,7 +40,6 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 
   // We should read the ESR_EL1 (exception syndrome register) to figure out
   // what kind of exception has occurred.
-
   uint64_t syndrome = 0;
   asm ("mrs %0, ESR_EL1" : "=r" (syndrome));
 

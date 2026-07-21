@@ -6,7 +6,7 @@
 
 template <typename T>
 static void kprintf_print_number(T number, int base) {
-  char number_buf[10];
+  char number_buf[20];
 
   // Exit early if number is zero
   if (number == 0) {
