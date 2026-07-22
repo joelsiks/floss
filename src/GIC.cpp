@@ -1,6 +1,4 @@
 
-#include <cstdint>
-
 #include "GIC.h"
 
 // The Distributor, Redistributor, and Interrupt Translation Service (ITS) are
@@ -22,7 +20,7 @@ struct MMDR_GICD {
 };
 
 // Memory Mapped Device Register for the Redistributor
-struct MMDR_GICR {
+struct MMDR_GICR_RD {
   volatile uint32_t CTRL;
   volatile uint32_t IIDR;
   volatile uint64_t TYPER;
@@ -30,9 +28,25 @@ struct MMDR_GICR {
   volatile uint32_t WAKER;
 };
 
-// TODO: These should really be found using the Device Tree
+// TODO: THis should really be found using the Device Tree
 static MMDR_GICD* gicd = reinterpret_cast<MMDR_GICD*>(0x08000000);
-static MMDR_GICR* gicr_pe0 = reinterpret_cast<MMDR_GICR*>(0x080A0000);
+
+static uintptr_t GICR_BASE = 0x080A0000;
+static uintptr_t GICR_STRIDE = 0x20000;
+static uintptr_t GICR_SD_OFFSET = 0;
+static uintptr_t GICR_SGI_OFFSET = 0x10000;
+
+static uintptr_t GICR_SGI_IGROUPR0 = 0x80;
+static uintptr_t GICR_SGI_ISENABLER0 = 0x100;
+static uintptr_t GICR_SGI_IPRIORITYRN_BASE = 0x400; // + 4 * n
+
+static MMDR_GICR_RD* redistributor_rd(int n) {
+  return reinterpret_cast<MMDR_GICR_RD*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET);
+}
+
+static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
+  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET + GICR_SGI_OFFSET + offset);
+}
 
 static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
@@ -58,22 +72,51 @@ void GIC::init_gic_redistributor() {
   // Enable each core's Redistributor. By default, the Redistributor is in a
   // low-power state to conserve energy. The Redistributor is awoken by clearing
   // the ProcessorSleep bit in the GICR_WAKER register.
-
-  // TODO: Right now we're only enabling the first core's Redistributor. Enable
-  // the Redistributor for other cores as well?
   //
   // TODO: Right now we don't have any methods for setting the priority via the
   // GICR_IPRIORITYR<n> register(s)
 
   // Read-Modify-Write
-  uint32_t waker = gicr_pe0->WAKER;
-  waker &= !GICR_WAKER_ProcessorSleep;
-  gicr_pe0->WAKER = waker;
+  uint32_t waker = redistributor_rd(0)->WAKER;
+  waker &= ~GICR_WAKER_ProcessorSleep;
+  redistributor_rd(0)->WAKER = waker;
 
   // Ensure write to GICR_WAKER has completed before continuing
   asm volatile ("dsb sy" ::: "memory");
 
   // Busy-wait until the ChildrenAsleep bit becomes 0, indicating that the
   // Redistributor has awoken
-  while ((gicr_pe0->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
+  while ((redistributor_rd(0)->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
+}
+
+void GIC::set_interrupt_priority(int id, int priority) {
+  const uint32_t reg_index = id / 4;
+  const uint32_t reg_offset = reg_index * 4;
+  const uint32_t byte_index = id % 4;
+  const uint32_t shift = byte_index * 8;
+
+  volatile uint32_t* p = redistributor_sgi(0, GICR_SGI_IPRIORITYRN_BASE + reg_offset);
+
+  // Read-Modify-Write
+  uint32_t ipriorityn = *p;
+  ipriorityn = (ipriorityn & ~0xFF) | (priority << shift);
+  *p = ipriorityn;
+}
+
+void GIC::set_interrupt_group(int id) {
+  // Read-Modify-Write
+  uint32_t igroupr0 = *redistributor_sgi(0, GICR_SGI_IGROUPR0);
+  igroupr0 |= 1 << id;
+  *redistributor_sgi(0, GICR_SGI_IGROUPR0) = igroupr0;
+  asm volatile("dsb sy" ::: "memory");
+}
+
+void GIC::enable_interrupt(int id) {
+  const uint32_t enable_bit = 1 << id;
+  *redistributor_sgi(0, GICR_SGI_ISENABLER0) = enable_bit;
+  asm volatile("dsb sy" ::: "memory");
+}
+
+void GIC::set_priority_mask(uint32_t priority) {
+  asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority));
 }

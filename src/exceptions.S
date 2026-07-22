@@ -26,7 +26,6 @@ exception_entry:
   bl    exception_handler
   cbnz  x0, .Lpanic
 
-.Lrestore_saved_regs:
   ldp   x0, x1, [sp, #0]
   ldp   x2, x3, [sp, #16]
   ldp   x4, x5, [sp, #32]
@@ -43,6 +42,39 @@ exception_entry:
 
 .Lpanic:
   b halt
+
+irq_entry:
+  sub   sp, sp, #192
+  stp   x0, x1, [sp, #0]
+  stp   x2, x3, [sp, #16]
+  stp   x4, x5, [sp, #32]
+  stp   x6, x7, [sp, #48]
+  stp   x8, x9, [sp, #64]
+  stp   x10, x11, [sp, #80]
+  stp   x12, x13, [sp, #96]
+  stp   x14, x15, [sp, #112]
+  stp   x16, x17, [sp, #128]
+  stp   x18, x29, [sp, #144]
+  stp   x30, xzr, [sp, #160]
+
+  mov   x0, sp
+  mrs   x1, ICC_IAR1_EL1
+  bl    irq_handler
+  msr   ICC_EOIR1_EL1, x0
+
+  ldp   x0, x1, [sp, #0]
+  ldp   x2, x3, [sp, #16]
+  ldp   x4, x5, [sp, #32]
+  ldp   x6, x7, [sp, #48]
+  ldp   x8, x9, [sp, #64]
+  ldp   x10, x11, [sp, #80]
+  ldp   x12, x13, [sp, #96]
+  ldp   x14, x15, [sp, #112]
+  ldp   x16, x17, [sp, #128]
+  ldp   x18, x29, [sp, #144]
+  ldp   x30, xzr, [sp, #160]
+  add   sp, sp, #192
+  eret
 
 .macro vector label
 .p2align 7
@@ -65,7 +97,7 @@ vector_table:
 
   # ELn own stack (kernel mode)
   vector exception_entry
-  vector exception_entry
+  vector irq_entry
   vector exception_entry
   vector exception_entry
 

@@ -9,6 +9,15 @@ project(floss
     LANGUAGES C CXX ASM
 )
 
+# Default to a Debug build so the kernel ELF always carries DWARF debug info
+# for gdb (the `run-debug` target opens gdb-multiarch on the built ELF).
+# -g comes from CMAKE_<LANG>_FLAGS_DEBUG; no -O is passed, so the compiler
+# defaults to -O0, which is the easiest to step through. Override at configure
+# time with -DCMAKE_BUILD_TYPE=RelWithDebInfo (or Release) if you want -O2.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+endif()
+
 # --- Bare-metal / freestanding options ---------------------------------------
 # Applied to every target in the tree via directory-level properties.
 add_compile_options(

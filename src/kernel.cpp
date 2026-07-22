@@ -7,14 +7,12 @@ extern "C" void kern_main(void) {
   GIC::init_gic_distributor();
   GIC::init_gic_redistributor();
 
+  GIC::set_interrupt_priority(30, 90);
+  GIC::set_interrupt_group(30);
+  GIC::enable_interrupt(30);
+
+  GIC::set_priority_mask(0xFF);
+
   const uint64_t el = Exception::get_exception_level();
   kprintf("Exception Level: %d\n", el);
-
-  uint64_t timer = 0;
-
-  asm ("mrs %0, CNTP_TVAL_EL0" : "=r" (timer));
-  kprintf("Timer: %d\n", timer);
-
-  asm ("mrs %0, CNTP_TVAL_EL0" : "=r" (timer));
-  kprintf("Timer: %d\n", timer);
 }
