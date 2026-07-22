@@ -4,14 +4,20 @@
 #include <cstdint>
 
 namespace GIC {
-  void init_gic_distributor();
-  void init_gic_redistributor();
+  namespace v3 {
+    void initialize_gic_distributor();
+    void initialize_gic_redistributor();
 
-  void set_interrupt_priority(int id, int priority);
-  void set_interrupt_group(int id);
-  void enable_interrupt(int id);
+    void enable_cpu_interface();
+    void enable_cpu_interrupts();
+    void set_cpu_priority_mask(uint64_t priority);
 
-  void set_priority_mask(uint32_t priority);
+    void set_interrupt_priority(int id, uint8_t priority);
+    void set_interrupt_group(int id);
+    void enable_interrupt(int id);
+  };
+
+  void initialize();
 };
 
 #endif // INCLUDE_GIC

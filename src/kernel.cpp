@@ -1,17 +1,16 @@
 
+#include "exception.h"
 #include "GIC.h"
 #include "kstdio.h"
-#include "exception.h"
+#include "timer.h"
 
 extern "C" void kern_main(void) {
-  GIC::init_gic_distributor();
-  GIC::init_gic_redistributor();
+  GIC::initialize();
 
-  GIC::set_interrupt_priority(30, 90);
-  GIC::set_interrupt_group(30);
-  GIC::enable_interrupt(30);
+  Timer::set_timer();
+  Timer::enable();
 
-  GIC::set_priority_mask(0xFF);
+  Exception::unmask_interrupts();
 
   const uint64_t el = Exception::get_exception_level();
   kprintf("Exception Level: %d\n", el);

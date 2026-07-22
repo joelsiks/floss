@@ -51,7 +51,7 @@ static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
 static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
 
-void GIC::init_gic_distributor() {
+void GIC::v3::initialize_gic_distributor() {
   // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.
   uint32_t ctrl = gicd->CTLR;
   ctrl |= (GICD_CTLR_Group1NS | GICD_CTLR_Group0);
@@ -68,7 +68,7 @@ void GIC::init_gic_distributor() {
 static const uint32_t GICR_WAKER_ProcessorSleep = 0b010;
 static const uint32_t GICR_WAKER_ChildrenAsleep = 0b100;
 
-void GIC::init_gic_redistributor() {
+void GIC::v3::initialize_gic_redistributor() {
   // Enable each core's Redistributor. By default, the Redistributor is in a
   // low-power state to conserve energy. The Redistributor is awoken by clearing
   // the ProcessorSleep bit in the GICR_WAKER register.
@@ -89,7 +89,34 @@ void GIC::init_gic_redistributor() {
   while ((redistributor_rd(0)->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
 }
 
-void GIC::set_interrupt_priority(int id, int priority) {
+void GIC::v3::enable_cpu_interface() {
+  // ICC_SRE_EL1, Interrupt Controller System Register Enable Register (EL1)
+  asm volatile(
+   "mrs   x0, ICC_SRE_EL1 \n\t\
+    orr   x0, x0, #1      \n\t\
+    msr   ICC_SRE_EL1, x0 \n\t\
+    isb                   \n\t\
+    "
+    ::: "memory"
+  );
+}
+void GIC::v3::enable_cpu_interrupts() {
+  // ICC_IGRPEN1_EL1, Interrupt Controller Interrupt Group 1 Enable Register
+  asm volatile(
+   "mrs   x0, ICC_IGRPEN1_EL1 \n\t\
+    orr   x0, x0, #1          \n\t\
+    msr   ICC_IGRPEN1_EL1, x0 \n\t\
+    isb                       \n\t\
+    "
+    ::: "memory"
+  );
+}
+
+void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
+  asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority));
+}
+
+void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
   const uint32_t reg_index = id / 4;
   const uint32_t reg_offset = reg_index * 4;
   const uint32_t byte_index = id % 4;
@@ -99,11 +126,11 @@ void GIC::set_interrupt_priority(int id, int priority) {
 
   // Read-Modify-Write
   uint32_t ipriorityn = *p;
-  ipriorityn = (ipriorityn & ~0xFF) | (priority << shift);
+  ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
   *p = ipriorityn;
 }
 
-void GIC::set_interrupt_group(int id) {
+void GIC::v3::set_interrupt_group(int id) {
   // Read-Modify-Write
   uint32_t igroupr0 = *redistributor_sgi(0, GICR_SGI_IGROUPR0);
   igroupr0 |= 1 << id;
@@ -111,12 +138,22 @@ void GIC::set_interrupt_group(int id) {
   asm volatile("dsb sy" ::: "memory");
 }
 
-void GIC::enable_interrupt(int id) {
+void GIC::v3::enable_interrupt(int id) {
   const uint32_t enable_bit = 1 << id;
   *redistributor_sgi(0, GICR_SGI_ISENABLER0) = enable_bit;
   asm volatile("dsb sy" ::: "memory");
 }
 
-void GIC::set_priority_mask(uint32_t priority) {
-  asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority));
+void GIC::initialize() {
+  GIC::v3::initialize_gic_distributor();
+  GIC::v3::initialize_gic_redistributor();
+
+  GIC::v3::enable_cpu_interface();
+  GIC::v3::set_cpu_priority_mask(0xFF);
+  GIC::v3::enable_cpu_interrupts();
+
+  GIC::v3::set_interrupt_priority(30, 90);
+  GIC::v3::set_interrupt_group(30);
+  GIC::v3::enable_interrupt(30);
+
 }

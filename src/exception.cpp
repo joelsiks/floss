@@ -1,12 +1,17 @@
 
 #include "exception.h"
 #include "kstdio.h"
+#include "timer.h"
 
 uint64_t Exception::get_exception_level() {
   uint64_t el;
   asm("mrs %0, CurrentEL" : "=r" (el));
   el = el >> 2 & 0b11;
   return el;
+}
+
+void Exception::unmask_interrupts() {
+  asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
 
 // The ExceptionFrame contains the saved/dumped contents of the registers when
@@ -83,16 +88,13 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 }
 
 extern "C" uint32_t Exception::irq_handler(ExceptionFrame* frame_ptr, uint32_t intid) {
-  kprintf("\nGot an interrupt: %p, INTID: %d\n", frame_ptr, intid);
-  frame_ptr->print_frame();
+  (void)frame_ptr;
 
   if (intid == 30) {
-    asm volatile(
-     "mrs   x0, CNTFRQ_EL0    \n\t\
-      msr   CNTP_TVAL_EL0, x0 \n\t\
-      "
-      ::: "memory"
-    );
+    kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
+    Timer::set_timer();
+  } else {
+    kprintf("Unhandled interrupt with INTID: %d\n", intid);
   }
 
   return intid;

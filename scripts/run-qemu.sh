@@ -50,6 +50,5 @@ exec qemu-system-aarch64 \
     -nographic \
     -no-reboot \
     -gdb tcp::1234 \
-    -d int \
     -kernel "$KERNEL" \
     "$@"
