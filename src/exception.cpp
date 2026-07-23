@@ -10,6 +10,10 @@ uint64_t Exception::get_exception_level() {
   return el;
 }
 
+void Exception::mask_interrupts() {
+  asm volatile("msr DAIFSet, #0b0010" ::: "memory");
+}
+
 void Exception::unmask_interrupts() {
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
@@ -89,12 +93,16 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 
 extern "C" uint32_t Exception::irq_handler(ExceptionFrame* frame_ptr, uint32_t intid) {
   (void)frame_ptr;
+  kprintf("Got Interrupt with INTID %d\n", intid);
 
   if (intid == 30) {
-    kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
+    //kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
     Timer::set_timer();
+  } else if (intid == 33) {
+    (void)frame_ptr;
+    //kprintf("Got\n");
   } else {
-    kprintf("Unhandled interrupt with INTID: %d\n", intid);
+    //kprintf("Unhandled interrupt with INTID: %d\n", intid);
   }
 
   return intid;

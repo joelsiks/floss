@@ -47,9 +47,12 @@ exception_entry:
 irq_entry:
   save_registers
   mov   x0, sp
+
+  # IAR is the Interrupt Acknowledge Register
   mrs   x1, ICC_IAR1_EL1
   bl    irq_handler
   msr   ICC_EOIR1_EL1, x0
+
   restore_registers
   eret
 

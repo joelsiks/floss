@@ -15,6 +15,7 @@ namespace GIC {
     void set_interrupt_priority(int id, uint8_t priority);
     void set_interrupt_group(int id);
     void enable_interrupt(int id);
+    void disable_interrupt(int id);
   };
 
   void initialize();

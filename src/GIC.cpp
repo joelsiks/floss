@@ -19,6 +19,19 @@ struct MMDR_GICD {
   volatile uint32_t IIDR;
 };
 
+static const uintptr_t GICD_BASE = 0x08000000;
+static const uintptr_t GICD_IGROUPR = 0x80;
+static const uintptr_t GICD_ISENABLER = 0x100;
+
+static const uintptr_t GICD_IPRIORITY_BASE = 0x400;
+
+static volatile uint32_t* distributor(uintptr_t offset = 0) {
+  return reinterpret_cast<volatile uint32_t*>(GICD_BASE + offset);
+}
+
+// TODO: This should really be found using the Device Tree
+static MMDR_GICD* const gicd = reinterpret_cast<MMDR_GICD*>(GICD_BASE);
+
 // Memory Mapped Device Register for the Redistributor
 struct MMDR_GICR_RD {
   volatile uint32_t CTRL;
@@ -28,17 +41,14 @@ struct MMDR_GICR_RD {
   volatile uint32_t WAKER;
 };
 
-// TODO: THis should really be found using the Device Tree
-static MMDR_GICD* gicd = reinterpret_cast<MMDR_GICD*>(0x08000000);
+static const uintptr_t GICR_BASE = 0x080A0000;
+static const uintptr_t GICR_STRIDE = 0x20000;
+static const uintptr_t GICR_SD_OFFSET = 0;
+static const uintptr_t GICR_SGI_OFFSET = 0x10000;
 
-static uintptr_t GICR_BASE = 0x080A0000;
-static uintptr_t GICR_STRIDE = 0x20000;
-static uintptr_t GICR_SD_OFFSET = 0;
-static uintptr_t GICR_SGI_OFFSET = 0x10000;
-
-static uintptr_t GICR_SGI_IGROUPR0 = 0x80;
-static uintptr_t GICR_SGI_ISENABLER0 = 0x100;
-static uintptr_t GICR_SGI_IPRIORITYRN_BASE = 0x400; // + 4 * n
+static const uintptr_t GICR_SGI_IGROUPR0 = 0x80;
+static const uintptr_t GICR_SGI_ISENABLER0 = 0x100;
+static const uintptr_t GICR_SGI_IPRIORITYR_BASE = 0x400; // + 4 * n
 
 static MMDR_GICR_RD* redistributor_rd(int n) {
   return reinterpret_cast<MMDR_GICR_RD*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET);
@@ -53,9 +63,9 @@ static const uint32_t GICD_CTLR_Group1NS = 0b10;
 
 void GIC::v3::initialize_gic_distributor() {
   // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.
-  uint32_t ctrl = gicd->CTLR;
-  ctrl |= (GICD_CTLR_Group1NS | GICD_CTLR_Group0);
-  gicd->CTLR = ctrl;
+  uint32_t ctlr = gicd->CTLR;
+  ctlr |= (GICD_CTLR_Group1NS | GICD_CTLR_Group0);
+  gicd->CTLR = ctlr;
 
   // Ensure write to GICD_CTLR has completed before continuing
   asm volatile ("dsb sy" ::: "memory");
@@ -122,7 +132,9 @@ void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
   const uint32_t byte_index = id % 4;
   const uint32_t shift = byte_index * 8;
 
-  volatile uint32_t* p = redistributor_sgi(0, GICR_SGI_IPRIORITYRN_BASE + reg_offset);
+  volatile uint32_t* p = id > 31
+      ? distributor(GICD_IPRIORITY_BASE + reg_offset)
+      : redistributor_sgi(0, GICR_SGI_IPRIORITYR_BASE + reg_offset);
 
   // Read-Modify-Write
   uint32_t ipriorityn = *p;
@@ -131,29 +143,67 @@ void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
 }
 
 void GIC::v3::set_interrupt_group(int id) {
-  // Read-Modify-Write
-  uint32_t igroupr0 = *redistributor_sgi(0, GICR_SGI_IGROUPR0);
-  igroupr0 |= 1 << id;
-  *redistributor_sgi(0, GICR_SGI_IGROUPR0) = igroupr0;
-  asm volatile("dsb sy" ::: "memory");
+  if (id > 31) {
+    const uint32_t reg_index = id / 32;
+    const uint32_t reg_offset = reg_index * 4;
+    const uint32_t shift = id % 32;
+
+    // Read-Modify-Write
+    uint32_t igrouprn = *distributor(GICD_IGROUPR + reg_offset);
+    igrouprn |= (1 << shift);
+    *distributor(GICD_IGROUPR + reg_offset) = igrouprn;
+    asm volatile("dsb sy" ::: "memory");
+  } else {
+    // Read-Modify-Write
+    uint32_t igroupr0 = *redistributor_sgi(0, GICR_SGI_IGROUPR0);
+    igroupr0 |= 1 << id;
+    *redistributor_sgi(0, GICR_SGI_IGROUPR0) = igroupr0;
+    asm volatile("dsb sy" ::: "memory");
+  }
 }
 
 void GIC::v3::enable_interrupt(int id) {
-  const uint32_t enable_bit = 1 << id;
-  *redistributor_sgi(0, GICR_SGI_ISENABLER0) = enable_bit;
-  asm volatile("dsb sy" ::: "memory");
+  // Both the GICD_ISENABLER<n> and GICR_ISENABLER0 are "write-1-to-set",
+  // so no masking is required to not affect other bits. ICENABLER has the
+  // opposite effect of "write-1-to-clear".
+
+  if (id > 31) {
+    const uint32_t reg_index = id / 32;
+    const uint32_t reg_offset = reg_index * 4;
+    const uint32_t shift = id % 32;
+
+    *distributor(GICD_ISENABLER + reg_offset) = (1 << shift);
+    asm volatile("dsb sy" ::: "memory");
+  } else {
+    // The Redistributor only handles interrupt ids between 0-31, which are the
+    // SGI and PPI ids.
+    *redistributor_sgi(0, GICR_SGI_ISENABLER0) = (1 << id);
+    asm volatile("dsb sy" ::: "memory");
+  }
+}
+
+void GIC::v3::disable_interrupt(int id) {
+  (void)id;
+  // TODO: Implement via the GICD_ICENABLER<n>/GICR_ICENABLER0, "write-1-to-clear"
 }
 
 void GIC::initialize() {
+  // Initialize the Distributor and Redistributor
   GIC::v3::initialize_gic_distributor();
   GIC::v3::initialize_gic_redistributor();
 
-  GIC::v3::enable_cpu_interface();
-  GIC::v3::set_cpu_priority_mask(0xFF);
-  GIC::v3::enable_cpu_interrupts();
+  // TODO: Initialize all Redistributors
 
   GIC::v3::set_interrupt_priority(30, 90);
   GIC::v3::set_interrupt_group(30);
   GIC::v3::enable_interrupt(30);
 
+  GIC::v3::set_interrupt_priority(33, 90);
+  GIC::v3::set_interrupt_group(33);
+  GIC::v3::enable_interrupt(33);
+
+  // Finish by enabling interrupts in the CPU interface
+  GIC::v3::enable_cpu_interface();
+  GIC::v3::set_cpu_priority_mask(0xFF);
+  GIC::v3::enable_cpu_interrupts();
 }
