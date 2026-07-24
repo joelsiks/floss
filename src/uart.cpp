@@ -82,6 +82,82 @@ void UART::pl011_send_str(const char* str) {
 }
 
 char UART::pl011_recv_sync() {
+  pl011_toggle_rx_interrupts(false);
   pl011_wait_poll_rx_complete();
+  char c = uart->DR;
+  pl011_toggle_rx_interrupts(true);
+  return c;
+}
+
+char UART::pl011_recv_async() {
   return uart->DR;
+}
+
+UART::ReceiveBuffer::ReceiveBuffer()
+  : _start(0),
+    _end(0),
+    _empty(true),
+    _ring_buffer() {}
+
+void UART::ReceiveBuffer::buffer_char(char c) {
+  _ring_buffer[_start] = c;
+
+  const bool was_same = _start == _end;
+
+  // Increment start
+  _start = (_start + 1) % BufferSize;
+
+  if (was_same && !_empty) {
+    // If start and end pointed to the same place and the buffer was not empty,
+    // then we "leak" an element by incrementing the end
+    _end = _start;
+  }
+
+  // We just added something to the buffer, so it is no longer empty
+  _empty = false;
+}
+
+bool UART::ReceiveBuffer::read_char(char& out_c) {
+  if (_empty) {
+    return false;
+  }
+
+  // Output the current element
+  out_c = _ring_buffer[_end];
+
+  _end = (_end + 1) % BufferSize;
+
+  if (_end == _start) {
+    // If the end is now equal to the start, then the buffer has been drained
+    // and is now empty
+    _empty = true;
+  }
+
+  return true;
+}
+
+uint8_t UART::ReceiveBuffer::elements_in_buffer() const {
+  if (_empty) {
+    return 0;
+  } else if (_start <= _end) {
+    return BufferSize + _start - _end;
+  } else {
+    return _start - _end;
+  }
+}
+
+void UART::ReceiveBuffer::print_buffer() const {
+  if (_empty) {
+    return;
+  }
+
+  UART::pl011_send_str("Ring buffer content: ");
+
+  uint8_t current = _start;
+  do {
+    UART::pl011_send_char(_ring_buffer[current]);
+    current = (current + 1) % BufferSize;
+  } while (current != _end);
+
+  UART::pl011_send_char('\n');
 }

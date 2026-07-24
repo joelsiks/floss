@@ -60,6 +60,9 @@ void kprintf(const char* format, ...) {
           const void* number = va_arg(args, void*);
           UART::pl011_send_str("0x");
           kprintf_print_number((uint64_t)number, 16);
+        } else if (specifier == 'c') {
+          const int char_as_num = va_arg(args, int);
+          UART::pl011_send_char((char)char_as_num);
         }
 
         current++;

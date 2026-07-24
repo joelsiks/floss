@@ -15,9 +15,6 @@ extern "C" void kern_main(void) {
 
   UART::pl011_toggle_rx_interrupts(true);
 
-  char c = UART::pl011_recv_sync();
-  kprintf("Got character: %d\n", c);
-
-  //const uint64_t el = Exception::get_exception_level();
-  //kprintf("Exception Level: %d\n", el);
+  const uint64_t el = Exception::get_exception_level();
+  kprintf("Kernel running at exception level: %d\n", el);
 }

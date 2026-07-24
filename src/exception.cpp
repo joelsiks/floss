@@ -2,6 +2,7 @@
 #include "exception.h"
 #include "kstdio.h"
 #include "timer.h"
+#include "uart.h"
 
 uint64_t Exception::get_exception_level() {
   uint64_t el;
@@ -91,18 +92,21 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   return bad_ec;
 }
 
+static UART::ReceiveBuffer uart_rx_irq_buffer;
+
 extern "C" uint32_t Exception::irq_handler(ExceptionFrame* frame_ptr, uint32_t intid) {
   (void)frame_ptr;
-  kprintf("Got Interrupt with INTID %d\n", intid);
 
   if (intid == 30) {
-    //kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
+    kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
     Timer::set_timer();
   } else if (intid == 33) {
-    (void)frame_ptr;
-    //kprintf("Got\n");
+    char c = UART::pl011_recv_async();
+    uart_rx_irq_buffer.buffer_char(c);
+    kprintf("Buffering char %d (INTID %d)\n", c, intid);
+    uart_rx_irq_buffer.print_buffer();
   } else {
-    //kprintf("Unhandled interrupt with INTID: %d\n", intid);
+    kprintf("Unhandled interrupt with INTID: %d\n", intid);
   }
 
   return intid;
