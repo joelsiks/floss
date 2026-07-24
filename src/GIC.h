@@ -6,7 +6,7 @@
 namespace GIC {
   namespace v3 {
     void initialize_gic_distributor();
-    void initialize_gic_redistributor();
+    void initialize_gic_redistributors();
 
     void enable_cpu_interface();
     void enable_cpu_interrupts();
@@ -19,6 +19,7 @@ namespace GIC {
   };
 
   void initialize();
+  void initialize_core_specific();
 };
 
 #endif // INCLUDE_GIC

@@ -5,6 +5,12 @@
 #include "timer.h"
 #include "uart.h"
 
+#include "psci.h"
+
+extern "C" void thread_entry(void) {
+  asm volatile("wfe");
+}
+
 extern "C" void kern_main(void) {
   GIC::initialize();
 

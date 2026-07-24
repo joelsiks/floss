@@ -11,6 +11,9 @@ namespace Exception {
   // Retrieves the current exception level
   uint64_t get_exception_level();
 
+  // Retrieves the cpu/core/PE id of the current core
+  uint64_t get_cpuid();
+
   // These methods mask/unmask the IRQ bit in the DAIF register
   void mask_interrupts();
   void unmask_interrupts();

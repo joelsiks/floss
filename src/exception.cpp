@@ -11,6 +11,17 @@ uint64_t Exception::get_exception_level() {
   return el;
 }
 
+uint64_t Exception::get_cpuid() {
+  uint64_t mpidr;
+  asm volatile(
+   "mrs   %0, MPIDR_EL1   \n\t\
+    and   %0, %0, #0xff   \n\t\
+    "
+    : "=r"(mpidr) :: "memory"
+  );
+  return mpidr;
+}
+
 void Exception::mask_interrupts() {
   asm volatile("msr DAIFSet, #0b0010" ::: "memory");
 }
@@ -72,21 +83,25 @@ struct ExceptionFrame {
   }
 };
 
-extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
+static const uint32_t ESR_EL1_EC_SHIFT = 26;
 
-  // We should read the ESR_EL1 (exception syndrome register) to figure out
-  // what kind of exception has occurred.
-  uint64_t syndrome = 0;
-  asm ("mrs %0, ESR_EL1" : "=r" (syndrome));
+static const uint64_t EC_UDF_INS = 0;
+
+extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
+  uint64_t exception_syndrome = 0;
+  asm ("mrs %0, ESR_EL1" : "=r" (exception_syndrome));
+
+  uint64_t exception_link = 0;
+  asm ("mrs %0, ELR_EL1" : "=r" (exception_link));
 
   // bits [31, 26] represent the "exception class", i.e., what kind of exception
   // has occurred.
-  const uint64_t ec = (syndrome >> 26) & 0b111111;
-  const bool bad_ec = ec == 0;
+  const uint64_t exception_class = (exception_syndrome >> ESR_EL1_EC_SHIFT) & 0b111111;
 
-  kprintf("The EC is: %d\n", ec);
+  const bool bad_ec = (exception_class == EC_UDF_INS);
 
-  kprintf("\nGot an exception: %p\n", frame_ptr);
+  kprintf("\nGot an exception (from %p)\n", exception_link);
+  kprintf("- The EC is: %d\n", exception_class);
   frame_ptr->print_frame();
 
   return bad_ec;
@@ -96,6 +111,7 @@ static UART::ReceiveBuffer uart_rx_irq_buffer;
 
 extern "C" uint32_t Exception::irq_handler(ExceptionFrame* frame_ptr, uint32_t intid) {
   (void)frame_ptr;
+  kprintf("IRQ INTID %d handled by %d\n", intid, get_cpuid());
 
   if (intid == 30) {
     kprintf("Generic Timer Interrupt (INTID %d)\n", intid);

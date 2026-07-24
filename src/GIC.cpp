@@ -1,5 +1,6 @@
 
 #include "GIC.h"
+#include "kstdio.h"
 
 // The Distributor, Redistributor, and Interrupt Translation Service (ITS) are
 // collectively known as an Interrupt Routing Infrastructure (IRI). There is one
@@ -11,6 +12,10 @@
 // PPI - Private Peripheral Interrupt (sent to a Redistributor)
 // SGI - Software Generated Interrupt (sent from the PE to the Redistributor)
 // LPI - Locality-specific Peripheral Interrupt (sent from the ITS)
+//
+// SGI and PPI are handled by a Redistributor and have interrupt ids (INTID)
+// of 0-31. SGI (and LPI?) are handled by the Distributor and have INTIDs of
+// 32-1023 (maybe more?)
 
 // Memory Mapped Device Register for the Distributor
 struct MMDR_GICD {
@@ -50,6 +55,8 @@ static const uintptr_t GICR_SGI_IGROUPR0 = 0x80;
 static const uintptr_t GICR_SGI_ISENABLER0 = 0x100;
 static const uintptr_t GICR_SGI_IPRIORITYR_BASE = 0x400; // + 4 * n
 
+static uint32_t NumRedistributors = 0;
+
 static MMDR_GICR_RD* redistributor_rd(int n) {
   return reinterpret_cast<MMDR_GICR_RD*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET);
 }
@@ -75,28 +82,41 @@ void GIC::v3::initialize_gic_distributor() {
   // https://jcomes.org/aarch64-os-interrupt-handling-ii
 }
 
+static const uint32_t GICR_TYPER_Last = 0b10000;
 static const uint32_t GICR_WAKER_ProcessorSleep = 0b010;
 static const uint32_t GICR_WAKER_ChildrenAsleep = 0b100;
 
-void GIC::v3::initialize_gic_redistributor() {
+void GIC::v3::initialize_gic_redistributors() {
   // Enable each core's Redistributor. By default, the Redistributor is in a
   // low-power state to conserve energy. The Redistributor is awoken by clearing
   // the ProcessorSleep bit in the GICR_WAKER register.
-  //
-  // TODO: Right now we don't have any methods for setting the priority via the
-  // GICR_IPRIORITYR<n> register(s)
+  uint32_t current_redistributor = 0;
 
-  // Read-Modify-Write
-  uint32_t waker = redistributor_rd(0)->WAKER;
-  waker &= ~GICR_WAKER_ProcessorSleep;
-  redistributor_rd(0)->WAKER = waker;
+  for (;;) {
+    // Read-Modify-Write
+    uint32_t waker = redistributor_rd(current_redistributor)->WAKER;
+    waker &= ~GICR_WAKER_ProcessorSleep;
+    redistributor_rd(current_redistributor)->WAKER = waker;
 
-  // Ensure write to GICR_WAKER has completed before continuing
-  asm volatile ("dsb sy" ::: "memory");
+    // Ensure write to GICR_WAKER has completed before continuing
+    asm volatile ("dsb sy" ::: "memory");
 
-  // Busy-wait until the ChildrenAsleep bit becomes 0, indicating that the
-  // Redistributor has awoken
-  while ((redistributor_rd(0)->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
+    // Busy-wait until the ChildrenAsleep bit becomes 0, indicating that the
+    // Redistributor has awoken
+    while ((redistributor_rd(current_redistributor)->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
+
+    if ((redistributor_rd(current_redistributor)->TYPER & GICR_TYPER_Last) != 0) {
+      // If the "last" bit is set in the TYPER mmdr, this distributor is the last one
+      break;
+    }
+
+    // Move on to next redistributor
+    current_redistributor++;
+  }
+
+  NumRedistributors = current_redistributor + 1;
+
+  kprintf("Num redistributors: %d\n", NumRedistributors);
 }
 
 void GIC::v3::enable_cpu_interface() {
@@ -132,14 +152,23 @@ void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
   const uint32_t byte_index = id % 4;
   const uint32_t shift = byte_index * 8;
 
-  volatile uint32_t* p = id > 31
-      ? distributor(GICD_IPRIORITY_BASE + reg_offset)
-      : redistributor_sgi(0, GICR_SGI_IPRIORITYR_BASE + reg_offset);
-
-  // Read-Modify-Write
-  uint32_t ipriorityn = *p;
-  ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
-  *p = ipriorityn;
+  if (id > 31) {
+    volatile uint32_t* p = distributor(GICD_IPRIORITY_BASE + reg_offset);
+    // Read-Modify-Write
+    uint32_t ipriorityn = *p;
+    ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
+    *p = ipriorityn;
+    asm volatile("dsb sy" ::: "memory");
+  } else {
+    for (uint32_t i = 0; i < NumRedistributors; i++) {
+      // Read-Modify-Write
+      volatile uint32_t* p = redistributor_sgi(i, GICR_SGI_IPRIORITYR_BASE + reg_offset);
+      uint32_t ipriorityn = *p;
+      ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
+      *p = ipriorityn;
+    }
+    asm volatile("dsb sy" ::: "memory");
+  }
 }
 
 void GIC::v3::set_interrupt_group(int id) {
@@ -154,10 +183,12 @@ void GIC::v3::set_interrupt_group(int id) {
     *distributor(GICD_IGROUPR + reg_offset) = igrouprn;
     asm volatile("dsb sy" ::: "memory");
   } else {
-    // Read-Modify-Write
-    uint32_t igroupr0 = *redistributor_sgi(0, GICR_SGI_IGROUPR0);
-    igroupr0 |= 1 << id;
-    *redistributor_sgi(0, GICR_SGI_IGROUPR0) = igroupr0;
+    for (uint32_t i = 0; i < NumRedistributors; i++) {
+      // Read-Modify-Write
+      uint32_t igroupr0 = *redistributor_sgi(i, GICR_SGI_IGROUPR0);
+      igroupr0 |= 1 << id;
+      *redistributor_sgi(i, GICR_SGI_IGROUPR0) = igroupr0;
+    }
     asm volatile("dsb sy" ::: "memory");
   }
 }
@@ -176,8 +207,10 @@ void GIC::v3::enable_interrupt(int id) {
     asm volatile("dsb sy" ::: "memory");
   } else {
     // The Redistributor only handles interrupt ids between 0-31, which are the
-    // SGI and PPI ids.
-    *redistributor_sgi(0, GICR_SGI_ISENABLER0) = (1 << id);
+    // SGI and PPI ids
+    for (uint32_t i = 0; i < NumRedistributors; i++) {
+      *redistributor_sgi(i, GICR_SGI_ISENABLER0) = (1 << id);
+    }
     asm volatile("dsb sy" ::: "memory");
   }
 }
@@ -187,13 +220,18 @@ void GIC::v3::disable_interrupt(int id) {
   // TODO: Implement via the GICD_ICENABLER<n>/GICR_ICENABLER0, "write-1-to-clear"
 }
 
+// Initialization sequence:
+//   GICD (Distributor)
+//   GICR (Redistributor)
+//   Setup interrupt ids (priority, group, then enable)
+//   CPU enable (ICC_SRE_EL1, priority mask ICC_PMR_EL1, ICC_IGRPEN1_EL1)
+//      Must be done by each PE themself
+
 void GIC::initialize() {
-  // Initialize the Distributor and Redistributor
   GIC::v3::initialize_gic_distributor();
-  GIC::v3::initialize_gic_redistributor();
+  GIC::v3::initialize_gic_redistributors();
 
-  // TODO: Initialize all Redistributors
-
+  // TODO: Better priority for these interrupts?
   GIC::v3::set_interrupt_priority(30, 90);
   GIC::v3::set_interrupt_group(30);
   GIC::v3::enable_interrupt(30);
@@ -202,7 +240,12 @@ void GIC::initialize() {
   GIC::v3::set_interrupt_group(33);
   GIC::v3::enable_interrupt(33);
 
-  // Finish by enabling interrupts in the CPU interface
+  initialize_core_specific();
+}
+
+void GIC::initialize_core_specific() {
+  // Finish by enabling interrupts in the CPU interface. This is done PER-CORE
+  // and can not be done solely by the "startup core"
   GIC::v3::enable_cpu_interface();
   GIC::v3::set_cpu_priority_mask(0xFF);
   GIC::v3::enable_cpu_interrupts();
