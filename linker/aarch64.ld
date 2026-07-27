@@ -14,6 +14,9 @@ ENTRY(_start)
 
 BASE = 0x40000000;
 
+STACK_SIZE = 0x10000; /* 64 KIB */
+NCPUS = 2;
+
 SECTIONS
 {
     . = BASE;
@@ -42,9 +45,8 @@ SECTIONS
         __bss_end = .;
     }
 
-    /* Reserve a simple initial stack. You'll likely switch to your own
-     * per-core stacks early in boot; this just gives you something to run on. */
     . = ALIGN(16);
-    . += 0x10000;            /* 64 KiB */
-    __stack_top = .;
+    __stacks_bottom = .;
+    . += STACK_SIZE * NCPUS;
+    __stacks_top = .;
 }

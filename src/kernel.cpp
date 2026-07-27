@@ -7,9 +7,13 @@
 
 #include "psci.h"
 
-extern "C" void thread_entry(void) {
-  asm volatile("wfe");
+extern "C" void secondary_main(uint64_t cpu_id) {
+  kprintf("Running core %d\n", cpu_id);
+  GIC::initialize_core_specific();
+  Exception::unmask_interrupts();
 }
+
+extern "C" void* _secondary_start;
 
 extern "C" void kern_main(void) {
   GIC::initialize();
@@ -23,4 +27,9 @@ extern "C" void kern_main(void) {
 
   const uint64_t el = Exception::get_exception_level();
   kprintf("Kernel running at exception level: %d\n", el);
+
+  const PSCIInfo psci_info = PSCI::information();
+  kprintf("PSCI version: %d.%d\n", psci_info._major, psci_info._minor);
+
+  PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
 }

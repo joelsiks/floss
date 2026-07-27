@@ -8,6 +8,8 @@
 *.img
 *.o
 *.a
+*.dtb
+*.dts
 
 # CMake / tooling
 compile_commands.json

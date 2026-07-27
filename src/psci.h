@@ -19,13 +19,18 @@
 //   different startup reasons. Alternatively, the supervisory software can use internal per-core data
 //   structures for this purpose.
 
+struct PSCIInfo {
+  uint32_t _major;
+  uint32_t _minor;
+};
+
 namespace PSCI {
+  // The PSCI functions/API accessed via Secure Monitor Call (SMC) (or Hypervisor Call (HVC) in some cases)
+  // has its own calling convention (SMC64/SMC32).
 
-  // The PSCI functions/API accessed via Secure Monitor Call (SMC) has its own
-  // calling convention.
+  PSCIInfo information();
 
-  uint32_t version_major();
-  uint32_t version_minor();
+  int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
 };
 
 #endif // INCLUDE_PSCI

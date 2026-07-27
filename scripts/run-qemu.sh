@@ -26,7 +26,7 @@ fi
 # inside gdb to attach to QEMU's gdbserver and `continue`.
 if [[ "${FLOSS_GDB:-0}" == "1" ]]; then
     if [[ -n "${TMUX:-}" ]]; then
-        tmux split-window -v "exec gdb-multiarch '${KERNEL}' -ex 'target remote :1234' -ex 'layout asm'"
+        tmux split-window -h "exec gdb-multiarch '${KERNEL}' -ex 'target remote :1234' -ex 'layout asm'"
     else
         echo "note: not inside tmux; skipping auto gdb pane." >&2
         echo "      attach manually:  gdb-multiarch ${KERNEL}" >&2
