@@ -9,7 +9,7 @@ A from-scratch AArch64 (64-bit ARM) operating system.
 An AArch64 cross toolchain and CMake is needed to build and run on x86.
 
 ```sh
-sudo apt install gcc-aarch64-linux-gnu cmake qemu-system-aarch64
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu make qemu-system-aarch64 gdb-multiarch
 ```
 
 ## Building
