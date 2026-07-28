@@ -17,9 +17,10 @@ sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu make qemu-system-aa
 Configure once (note the toolchain file):
 
 ```sh
-cmake -B build -S . -G "Unix Makefiles" \
+cmake -S . -B build -G "Unix Makefiles" \
     -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_BUILD_TYPE=Debug
 ```
 
 Then build with:
@@ -60,4 +61,9 @@ gdb-multiarch build/floss_kernel
 ```
 
 If you want the debugger to start at the beginning of execution in the QEMU VM, add the `-S` flag to `scripts/run-qemu.sh`.
+
+It might be useful to set scheduler locking to step mode so that multiple threads/cores are not executing simultaneously when debugging.
+```
+(gdb) set scheduler-locking step
+```
 

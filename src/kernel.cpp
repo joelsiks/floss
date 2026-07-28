@@ -18,8 +18,8 @@ extern "C" void* _secondary_start;
 extern "C" void kern_main(void) {
   GIC::initialize();
 
-  Timer::set_timer();
-  Timer::enable();
+  //Timer::set_timer();
+  //Timer::enable();
 
   Exception::unmask_interrupts();
 

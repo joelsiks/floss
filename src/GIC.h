@@ -16,6 +16,8 @@ namespace GIC {
     void set_interrupt_group(int id);
     void enable_interrupt(int id);
     void disable_interrupt(int id);
+
+    void set_interrupt_routing(int id, bool any);
   };
 
   void initialize();

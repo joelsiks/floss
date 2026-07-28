@@ -29,9 +29,14 @@ static const uintptr_t GICD_IGROUPR = 0x80;
 static const uintptr_t GICD_ISENABLER = 0x100;
 
 static const uintptr_t GICD_IPRIORITY_BASE = 0x400;
+static const uintptr_t GICD_IROUTER = 0x6000;
 
 static volatile uint32_t* distributor(uintptr_t offset = 0) {
   return reinterpret_cast<volatile uint32_t*>(GICD_BASE + offset);
+}
+
+static volatile uint64_t* distributor_wide(uintptr_t offset = 0) {
+  return reinterpret_cast<volatile uint64_t*>(GICD_BASE + offset);
 }
 
 // TODO: This should really be found using the Device Tree
@@ -67,11 +72,12 @@ static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
 
 static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
+static const uint32_t GICD_CTLR_E1NWF = 0b10000000; // Enable 1 of N Wakeup Functionality
 
 void GIC::v3::initialize_gic_distributor() {
   // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.
   uint32_t ctlr = gicd->CTLR;
-  ctlr |= (GICD_CTLR_Group1NS | GICD_CTLR_Group0);
+  ctlr |= (GICD_CTLR_E1NWF | GICD_CTLR_Group1NS | GICD_CTLR_Group0);
   gicd->CTLR = ctlr;
 
   // Ensure write to GICD_CTLR has completed before continuing
@@ -83,6 +89,7 @@ void GIC::v3::initialize_gic_distributor() {
 }
 
 static const uint32_t GICR_TYPER_Last = 0b10000;
+static const uint32_t GICR_TYPER_DPGS = 0b100000;
 static const uint32_t GICR_WAKER_ProcessorSleep = 0b010;
 static const uint32_t GICR_WAKER_ChildrenAsleep = 0b100;
 
@@ -220,6 +227,33 @@ void GIC::v3::disable_interrupt(int id) {
   // TODO: Implement via the GICD_ICENABLER<n>/GICR_ICENABLER0, "write-1-to-clear"
 }
 
+static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 63; // Interrupt Routing Mode
+
+void GIC::v3::set_interrupt_routing(int id, bool any) {
+  if (id > 31)  {
+    const uint64_t offset = 8 * id;
+    
+    uint64_t iroutern = *distributor_wide(GICD_IROUTER + offset);
+
+    if (any) {
+      // Setting the IRM bit to 1 means that his INTID is forwarded to any PE
+      // that qualify as a "participating node". A participating node is a PE
+      // that has:
+      //    GICR_WAKER.ProcessorSleep == 0 (with INTID configured on that Redistributor)
+      //    GICD_CTLR.E1NWF == 1
+      //    GICR_TYPER.DPGS == 1 // Disable Processor Group Selections
+      iroutern |= GICD_IROUTER_IRM;
+    } else {
+      // TODO: Handle this case, which involves setting the affinity (aff0-aff3)
+    }
+
+    // Write value
+    *distributor_wide(GICD_IROUTER + offset) = iroutern;
+    asm volatile("dsb sy" ::: "memory");
+  } else {
+  }
+}
+
 // Initialization sequence:
 //   GICD (Distributor)
 //   GICR (Redistributor)
@@ -239,6 +273,8 @@ void GIC::initialize() {
   GIC::v3::set_interrupt_priority(33, 90);
   GIC::v3::set_interrupt_group(33);
   GIC::v3::enable_interrupt(33);
+
+  GIC::v3::set_interrupt_routing(33, true);
 
   initialize_core_specific();
 }
