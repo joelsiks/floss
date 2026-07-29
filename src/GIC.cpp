@@ -82,14 +82,9 @@ void GIC::v3::initialize_gic_distributor() {
 
   // Ensure write to GICD_CTLR has completed before continuing
   asm volatile ("dsb sy" ::: "memory");
-
-  // This blog post checks if the ARE_S field is set in the CTRL register. Maybe
-  // we should check the ARE_NS field if we care about that?
-  // https://jcomes.org/aarch64-os-interrupt-handling-ii
 }
 
 static const uint32_t GICR_TYPER_Last = 0b10000;
-static const uint32_t GICR_TYPER_DPGS = 0b100000;
 static const uint32_t GICR_WAKER_ProcessorSleep = 0b010;
 static const uint32_t GICR_WAKER_ChildrenAsleep = 0b100;
 
@@ -150,7 +145,11 @@ void GIC::v3::enable_cpu_interrupts() {
 }
 
 void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
-  asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority));
+  asm volatile(
+   "msr ICC_PMR_EL1, %0 \n\t\
+    isb                 \n\t\
+    "
+    :: "r"(priority) : "memory");
 }
 
 void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
@@ -232,7 +231,7 @@ static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 63; // Interrupt Routing
 void GIC::v3::set_interrupt_routing(int id, bool any) {
   if (id > 31)  {
     const uint64_t offset = 8 * id;
-    
+
     uint64_t iroutern = *distributor_wide(GICD_IROUTER + offset);
 
     if (any) {

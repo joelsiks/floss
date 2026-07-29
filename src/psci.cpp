@@ -47,6 +47,7 @@ int32_t PSCI::boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint6
   // Three uint64_t arguments if we're using the SMC64 CC. Arguments are passed
   // in x1-x17, with the "Function Identifier" in x0.
 
+  // Function identifier
   register uint64_t r0 __asm__("x0") = PSCI_PSCI_CPU_ON;
   // First argument is the target_cpu (copy of the MPIDR register)
   register uint64_t r1 __asm__("x1") = target_cpu;
