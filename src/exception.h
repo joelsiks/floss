@@ -1,6 +1,5 @@
-
-#ifndef INLCUDE_EXCEPTION
-#define INLCUDE_EXCEPTION
+#ifndef INCLUDE_EXCEPTION
+#define INCLUDE_EXCEPTION
 
 #include <cstdint>
 #include <cstdint>
