@@ -24,7 +24,7 @@ add_compile_options(
     -ffreestanding          # We don't assume a hosted C environment / libc
     -fno-pie                # Fixed load address, not position-independent
     -fno-pic
-    -mgeneral-regs-only     # Avoid FP/SIMD regs (you'd have to save/restore them)
+    -mgeneral-regs-only     # Avoid FP/SIMD regs (for now)
     -Wall -Wextra
     -fno-exceptions
     -fno-rtti

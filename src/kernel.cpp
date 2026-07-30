@@ -32,4 +32,6 @@ extern "C" void kern_main(void) {
   kprintf("PSCI version: %d.%d\n", psci_info._major, psci_info._minor);
 
   PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
+
+  uint64_t test2 = *(uint64_t*)(0xC0000000);
 }
