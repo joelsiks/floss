@@ -1,15 +1,13 @@
 # Floss
 
-A toy OS for AArch64.
-
-A from-scratch AArch64 (64-bit ARM) operating system.
+A toy OS for AArch64 (64-bit ARM).
 
 ## Prerequisites
 
-An AArch64 cross toolchain and CMake is needed to build and run on x86.
+An AArch64 cross toolchain and CMake is needed to build and run on x86. To debug you also need `gdb-multiarch`.
 
 ```sh
-sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu make qemu-system-aarch64 gdb-multiarch
+sudo apt-get install cmake make gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-system-aarch64 gdb-multiarch
 ```
 
 ## Building
@@ -44,11 +42,6 @@ cmake --build build --target run
 ```
 
 Exit QEMU with `Ctrl-A` then `X`.
-
-### Tuning QEMU
-Edit `scripts/run-qemu.sh` to change the board/CPU/RAM. Common swaps:
-- `-cpu cortex-a72` for a beefier ARMv8-A core.
-- `-m 512M` for more RAM.
 
 ## Debugging
 
