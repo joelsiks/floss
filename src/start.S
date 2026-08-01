@@ -5,6 +5,9 @@
 .global _secondary_start
 
 _start:
+  # Stash away the pointer to the FDT, which arrives in x0 from the bootloader
+  mov   x18, x0
+
   # Park all cores that aren't core 0 if they ever get in here. If cores are
   # halted/turned off during startup, they are awoken to the _secondary_start
   # function below, via PSCI CPU_ON.
@@ -30,7 +33,8 @@ _start:
   msr   VBAR_EL1, x0
   isb
 
-  # Enter the kernel
+  # Restore the stashed FDT pointer and enter the kernel
+  mov   x0, x18
   bl    kern_main
   b     park
 

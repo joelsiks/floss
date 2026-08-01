@@ -33,6 +33,8 @@ if [[ "${FLOSS_GDB:-0}" == "1" ]]; then
     fi
 fi
 
+aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
+
 # -M virt            : the generic "virt" board; load address 0x40000000 (see linker/aarch64.ld)
 # -cpu cortex-a53    : a common ARMv8-A core (matches the linker/load assumptions)
 # -m 128M            : 128 MiB of RAM — plenty for early bring-up
@@ -50,6 +52,6 @@ exec qemu-system-aarch64 \
     -nographic \
     -no-reboot \
     -gdb tcp::1234 \
-    -kernel "$KERNEL" \
+    -kernel "$KERNEL.bin" \
     -smp 2 \
     "$@"

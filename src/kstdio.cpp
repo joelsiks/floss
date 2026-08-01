@@ -56,6 +56,13 @@ void kprintf(const char* format, ...) {
         if (specifier == 'd') {
           const int number = va_arg(args, int);
           kprintf_print_number(number, 10);
+        } else if (specifier == 's') {
+          const char* str = va_arg(args, const char*);
+          if (str != nullptr) {
+            UART::pl011_send_str(str);
+          } else {
+            UART::pl011_send_str("(null)");
+          }
         } else if (specifier == 'p') {
           const void* number = va_arg(args, void*);
           UART::pl011_send_str("0x");

@@ -12,7 +12,7 @@
 
 ENTRY(_start)
 
-BASE = 0x40000000;
+BASE = 0x40080000;
 
 STACK_SIZE = 0x10000; /* 64 KIB */
 NCPUS = 2;
