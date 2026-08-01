@@ -8,14 +8,14 @@
 static uint64_t PSCI_CPU_ON{0};
 static PSCIMethod PSCI_METHOD;
 
-void PSCI::initialize_cpu_on(uint64_t cpu_on) {
+void PSCI::set_cpu_on(uint64_t cpu_on) {
   PSCI_CPU_ON = cpu_on;
 }
 
 static PSCIMethod psci_method_from_str(const char* method_str) {
-  if (strcmp(method_str, "hvc")) {
+  if (strcmp(method_str, "hvc") == 0) {
     return PSCIMethod::Hypervisor;
-  } else if (strcmp(method_str, "smc")) {
+  } else if (strcmp(method_str, "smc") == 0) {
     return PSCIMethod::Supervisor;
   }
 
@@ -24,7 +24,7 @@ static PSCIMethod psci_method_from_str(const char* method_str) {
   return PSCIMethod::Supervisor;
 }
 
-void PSCI::initialize_method(const char* method_str) {
+void PSCI::set_method(const char* method_str) {
   PSCI_METHOD = psci_method_from_str(method_str);
 }
 

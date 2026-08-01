@@ -29,8 +29,8 @@ enum class PSCIMethod {
 };
 
 namespace PSCI {
-  void initialize_cpu_on(uint64_t cpu_on);
-  void initialize_method(const char* method_str);
+  void set_cpu_on(uint64_t cpu_on);
+  void set_method(const char* method_str);
 
   int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
 };

@@ -155,7 +155,7 @@ DeviceTree::Token DeviceTree::Parser::next() {
           return _token;
         }
 
-        const uint32_t len     = be32(_pos);
+        const uint32_t len = be32(_pos);
         const uint32_t nameoff = be32(_pos + 4);
         _pos += 8;
 

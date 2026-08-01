@@ -4,6 +4,8 @@
 #include <stdint.h>
 
 namespace UART {
+  void set_uart_base(void* uart_base);
+
   void pl011_toggle_rx_interrupts(bool on);
   void pl011_toggle_tx_interrupts(bool on);
 

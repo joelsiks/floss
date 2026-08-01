@@ -15,8 +15,11 @@ struct MMDR_UART {
   volatile uint32_t MIS;  // 0x40 Masked Interrupt Status Register
 };
 
-// TODO: This should really be found using the Device Tree.
-static MMDR_UART* uart = reinterpret_cast<MMDR_UART*>(0x09000000);
+static MMDR_UART* uart = reinterpret_cast<MMDR_UART*>(0x9000000);
+
+void UART::set_uart_base(void* uart_base) {
+  uart = reinterpret_cast<MMDR_UART*>(uart_base);
+}
 
 // Bits for the Interrupt Mask Set Clear register
 static const uint32_t IMSC_RXIM_BIT = 1 << 4;
