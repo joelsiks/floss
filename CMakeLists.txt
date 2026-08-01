@@ -50,6 +50,11 @@ target_link_options(floss_kernel PRIVATE
 set_target_properties(floss_kernel PROPERTIES LINK_DEPENDS
    ${CMAKE_SOURCE_DIR}/linker/aarch64.ld)
 
+# Include paths: make src/ the root for includes, so #include "util/assert.h"
+# resolves to src/util/assert.h, #include "uart.h" resolves to src/uart.h, etc.
+target_include_directories(floss_kernel PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 # --- QEMU run target ---------------------------------------------------------
 # `cmake --build build --target run` boots the built kernel under QEMU via the
 # script below. This target configures fine even before floss_kernel exists; it

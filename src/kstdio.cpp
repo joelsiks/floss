@@ -43,7 +43,11 @@ static void kprintf_print_number(T number, int base) {
 void kprintf(const char* format, ...) {
   va_list args;
   va_start(args, format);
+  vkprintf(format, args);
+  va_end(args);
+}
 
+void vkprintf(const char *format, va_list args) {
   const char* current = format;
   while (*current != '\0') {
     // If we encounter a '%' and the next character is not the null-terminator,

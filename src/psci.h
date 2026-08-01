@@ -18,17 +18,19 @@
 //   entry point directly in its own OS address space. Different addresses can be provided to handle
 //   different startup reasons. Alternatively, the supervisory software can use internal per-core data
 //   structures for this purpose.
+//
+// The PSCI functions/API accessed via Secure Monitor Call (SMC) (or Hypervisor Call (HVC) in some cases)
+// has its own calling convention (SMC64/SMC32).
 
-struct PSCIInfo {
-  uint32_t _major;
-  uint32_t _minor;
+// The method used to call into the PSCI API. Depends on which level PSCI is implemented in (EL2/EL3).
+enum class PSCIMethod {
+  Hypervisor, // hvc
+  Supervisor  // smc
 };
 
 namespace PSCI {
-  // The PSCI functions/API accessed via Secure Monitor Call (SMC) (or Hypervisor Call (HVC) in some cases)
-  // has its own calling convention (SMC64/SMC32).
-
-  PSCIInfo information();
+  void initialize_cpu_on(uint64_t cpu_on);
+  void initialize_method(const char* method_str);
 
   int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
 };

@@ -229,4 +229,3 @@ uint64_t DeviceTree::Parser::read_u64(const void* p) {
   return be64(p);
 }
 
-

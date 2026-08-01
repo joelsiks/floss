@@ -4,6 +4,7 @@
 #include "kstdio.h"
 #include "timer.h"
 #include "uart.h"
+#include "libcstubs.h"
 
 #include "DeviceTree.h"
 
@@ -16,15 +17,6 @@ extern "C" void secondary_main(uint64_t cpu_id) {
 }
 
 extern "C" void* _secondary_start;
-
-// TODO: Move this to some better place
-extern "C" void memset(void* ptr, int c, uint64_t n) {
-  // TODO: Add an assert that 0 <= c <= 255
-  uint8_t* const memory = reinterpret_cast<uint8_t*>(ptr);
-  for (uint64_t i = 0; i < n; i++) {
-    memory[i] = (uint8_t)c;
-  }
-}
 
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   const uint64_t el = Exception::get_exception_level();
@@ -39,11 +31,6 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::pl011_toggle_rx_interrupts(true);
 
-  const PSCIInfo psci_info = PSCI::information();
-  kprintf("PSCI version: %d.%d\n", psci_info._major, psci_info._minor);
-
-  PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
-
   DeviceTree::Parser dtp;
   if (dtp.init(fdt) != DeviceTree::Status::Ok) {
     // TODO: Probably some form of kernel panic instead...
@@ -51,16 +38,28 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
     return;
   }
 
+  const char* current_node = nullptr;
   while (dtp.next() != DeviceTree::Token::End) {
+
     switch (dtp.current()) {
       case DeviceTree::Token::BeginNode:
-        kprintf("BeginNode '%s'\n", dtp.node_name());
+        current_node = dtp.node_name();
+        break;
+      case DeviceTree::Token::EndNode:
+        current_node = nullptr;
         break;
       case DeviceTree::Token::Prop:
-        kprintf("Prop '%s' (len=%d)\n", dtp.prop_name(), dtp.prop_len());
+        //kprintf("%s %s %d %p\n", current_node, dtp.prop_name(), dtp.prop_len(), dtp.prop_value());
+        if (strcmp(current_node, "psci") == 0) {
+          if (strcmp(dtp.prop_name(), "cpu_on") == 0) {
+            PSCI::initialize_cpu_on(reinterpret_cast<uint64_t>(dtp.prop_value()));
+          } else if (strcmp(dtp.prop_name(), "method") == 0) {
+            PSCI::initialize_method(reinterpret_cast<const char*>(dtp.prop_value()));
+          }
+        }
         break;
-      default:
-        kprintf("Unhandled token type\n");
     }
   }
+
+  PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
 }
