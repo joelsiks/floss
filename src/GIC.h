@@ -5,6 +5,8 @@
 
 namespace GIC {
   namespace v3 {
+    void set_gicd_base(uint64_t gicd_base);
+
     void initialize_gic_distributor();
     void initialize_gic_redistributors();
 

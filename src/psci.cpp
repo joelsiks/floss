@@ -19,7 +19,6 @@ static PSCIMethod psci_method_from_str(const char* method_str) {
     return PSCIMethod::Supervisor;
   }
 
-  // TODO: Panic
   kpanic("Unknown PSCI method '%s'\n", method_str);
   return PSCIMethod::Supervisor;
 }

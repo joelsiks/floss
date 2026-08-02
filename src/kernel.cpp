@@ -47,13 +47,14 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
           } else if (strcmp(dtp.prop_name(), "method") == 0) {
             PSCI::set_method(reinterpret_cast<const char*>(dtp.prop_value()));
           }
-        } else if(strncmp(current_node, "pl011", 5) == 0) {
-          if (strcmp(dtp.prop_name(), "reg")) {
-            uint64_t v = DeviceTree::Parser::read_u64(dtp.prop_value());
-            kprintf("%d %p\n", dtp.prop_len(), v);
+        } else if (strncmp(current_node, "pl011", 5) == 0) {
+          if (strcmp(dtp.prop_name(), "reg") == 0) {
+            const uint64_t uart_base = DeviceTree::Parser::read_u64(dtp.prop_value());
+            UART::set_uart_base(uart_base);
           }
-
-          kprintf("prop name %s\n", dtp.prop_name());
+        } else if (strncmp(current_node, "intc", 4) == 0) {
+          if (strcmp(dtp.prop_name(), "reg") == 0) {
+          }
         }
         break;
       case DeviceTree::Token::End:

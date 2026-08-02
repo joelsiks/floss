@@ -15,9 +15,9 @@ struct MMDR_UART {
   volatile uint32_t MIS;  // 0x40 Masked Interrupt Status Register
 };
 
-static MMDR_UART* uart = reinterpret_cast<MMDR_UART*>(0x9000000);
+static MMDR_UART* uart = nullptr;
 
-void UART::set_uart_base(void* uart_base) {
+void UART::set_uart_base(uint64_t uart_base) {
   uart = reinterpret_cast<MMDR_UART*>(uart_base);
 }
 
