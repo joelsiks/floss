@@ -1,27 +1,15 @@
 
+#include <cstring>
+
+#include "DeviceTree.h"
 #include "exception.h"
 #include "GIC.h"
 #include "kstdio.h"
+#include "psci.h"
 #include "timer.h"
 #include "uart.h"
-#include "libcstubs.h"
 
-#include "DeviceTree.h"
-
-#include "psci.h"
-
-extern "C" void secondary_main(uint64_t cpu_id) {
-  kprintf("Running core %d\n", cpu_id);
-  GIC::initialize_core_specific();
-  Exception::unmask_interrupts();
-}
-
-extern "C" void* _secondary_start;
-
-extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
-  const uint64_t el = Exception::get_exception_level();
-  kprintf("Kernel running at exception level: %d\n", el);
-
+static void parse_device_tree(DeviceTree::FlattenedDeviceTree* fdt) {
   DeviceTree::Parser dtp;
   if (dtp.init(fdt) != DeviceTree::Status::Ok) {
     // TODO: Probably some form of kernel panic instead...
@@ -54,6 +42,7 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
           }
         } else if (strncmp(current_node, "intc", 4) == 0) {
           if (strcmp(dtp.prop_name(), "reg") == 0) {
+            kprintf("%s %d %d\n", dtp.prop_name(), dtp.prop_value(), dtp.prop_len());
           }
         }
         break;
@@ -62,6 +51,23 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
         continue;
     }
   }
+}
+
+extern "C" void secondary_main(uint64_t cpu_id) {
+  kprintf("Running core %d\n", cpu_id);
+  GIC::initialize_core_specific();
+  Exception::unmask_interrupts();
+}
+
+extern "C" void* _secondary_start;
+
+extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
+  // Start by parsing the flattened device tree so that we have MMIO addresses
+  // set up before continuing the setup of the OS.
+  parse_device_tree(fdt);
+
+  const uint64_t el = Exception::get_exception_level();
+  kprintf("Kernel running at exception level: %d\n", el);
 
   GIC::initialize();
 
