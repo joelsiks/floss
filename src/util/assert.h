@@ -10,9 +10,13 @@ void report_error(const char* file, int line, const char* error_msg, const char*
 
 // TODO: Make this function [[noreturn]] and gracefully exit the OS
 //void report_error_and_die(const char* file, int line, const char* error_msg, const char* detail_fmt, ...);
+#define kprecond(p) kassert(p, "precond\n")
+#define kpostcond(p) kassert(p, "postcond\n")
 
 #define kassert(p, ...) \
-  report_error(__FILE__, __LINE__, "kassert(" #p ") failed: ", __VA_ARGS__) \
+  do { \
+    if (!(p)) report_error(__FILE__, __LINE__, "kassert(" #p ") failed: ", __VA_ARGS__); \
+  } while (0);
 
 #define kpanic(...) \
   report_error(__FILE__, __LINE__, "Kernel panic: ", __VA_ARGS__)

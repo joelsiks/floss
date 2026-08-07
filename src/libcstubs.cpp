@@ -1,11 +1,14 @@
 
 #include "libcstubs.h"
 
-void memset(void* ptr, int c, uint64_t n) {
-  // TODO: Add an assert that 0 <= c <= 255
-  uint8_t* const memory = reinterpret_cast<uint8_t*>(ptr);
-  for (uint64_t i = 0; i < n; i++) {
-    memory[i] = (uint8_t)c;
+#include "util/assert.h"
+
+void memset(void* ptr, int c, size_t n) {
+  kprecond(c >= 0 && c < 256);
+
+  char* const memory = reinterpret_cast<char*>(ptr);
+  for (size_t i = 0; i < n; i++) {
+    memory[i] = (char)c;
   }
 }
 
@@ -18,8 +21,8 @@ int strcmp(const char *s1, const char *s2) {
   return (unsigned char)*s1 - (unsigned char)*s2;
 }
 
-int strncmp(const char *s1, const char *s2, uint64_t n) {
-  uint64_t characters_left = n;
+int strncmp(const char *s1, const char *s2, size_t n) {
+  size_t characters_left = n;
   while (*s1 && (*s1 == *s2) && characters_left > 1) {
     s1++;
     s2++;
@@ -27,4 +30,22 @@ int strncmp(const char *s1, const char *s2, uint64_t n) {
   }
 
   return (unsigned char)*s1 - (unsigned char)*s2;
+}
+
+size_t strlen(const char* s) {
+  const char* begin = s;
+  for(; *s; s++);
+  return s - begin;
+}
+
+size_t strnlen(const char* s, size_t maxlen) {
+  const char* begin = s;
+
+  for(; *s; s++) {
+    if ((size_t)(s - begin) == maxlen) {
+      return maxlen;
+    }
+  }
+
+  return s - begin;
 }

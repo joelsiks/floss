@@ -4,29 +4,82 @@
 #include <cstdint>
 
 namespace DeviceTree {
+  // Gives a total static allocation size of:
+  // MaxNodeDepth * sizeof(PropFrame) * MaxPropsPerNode
+  const uint32_t MaxPropsPerNode = 16;
+  const uint32_t MaxNodeDepth    = 8;
 
-  // Raw flattened device tree (FDT) header, as laid out in memory (big-endian)
+  struct PropFrame {
+    const char* _name;
+    const void* _value;
+    uint32_t    _len;
+  };
+
+  // Holds the values of #address-cells and #size-cells. Default values are
+  // defined in the spec, see chapter 2.3.5.
+  struct NodeCells {
+    // Each unit is worth four bytes (a uint32_t)
+    static const uint32_t BytesPerUnit = 4;
+
+    uint32_t _address{2};
+    uint32_t _size{1};
+
+    inline uint32_t total() const { return _address + _size; }
+    inline uint32_t byte_size() const { return total() * BytesPerUnit; }
+  };
+
+  struct NodeFrame {
+    const char* _name;
+    PropFrame*  _compatible_prop;
+    NodeCells   _parent_cells;
+    NodeCells   _own_cells;
+    uint32_t    _nprops;
+    PropFrame   _props[MaxPropsPerNode];
+
+    inline PropFrame* current_prop() { return &_props[_nprops]; }
+  };
+
+  struct ParsingFrame {
+    NodeFrame _node_frame[MaxNodeDepth];
+    uint32_t  _top; // The current NodeFrame position
+
+    inline NodeFrame* current() { return &_node_frame[_top]; }
+  };
+
+  struct NodeHandler {
+    const char* _compatible;
+    void (*_on_node)(DeviceTree::NodeFrame*);
+  };
+
+  // A pair of (address, length) values stored in the "reg" property of a node
+  // See spec chapter 2.3.6
+  struct RegPair {
+    uint64_t _address;
+    uint64_t _length;
+  };
+
+  void read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp);
+
   // Chapter 5 of the Devicetree Specification v0.4
+  // Raw flattened device tree (FDT) header, as laid out in memory (big-endian)
   struct FDTHeader {
-    uint32_t magic;             // Always 0xd00dfeed (big-endian)
-    uint32_t totalsize;         // Total blob size in bytes
-    uint32_t off_dt_struct;     // Offset of the structure block from the blob start
-    uint32_t off_dt_strings;    // Offset of the strings block
-    uint32_t off_mem_rsvmap;    // Offset of the memory reservation block
-    uint32_t version;           // 17 for the layout described by this spec
-    uint32_t last_comp_version; // Lowest backwards-compatible version (16)
-    uint32_t boot_cpuid_phys;   // Physical ID of the boot CPU
-    uint32_t size_dt_strings;   // Size of the strings block in bytes
-    uint32_t size_dt_struct;    // Size of the structure block in bytes
+    uint32_t _magic;             // Always 0xd00dfeed (big-endian)
+    uint32_t _totalsize;         // Total blob size in bytes
+    uint32_t _off_dt_struct;     // Offset of the structure block from the blob start
+    uint32_t _off_dt_strings;    // Offset of the strings block
+    uint32_t _off_mem_rsvmap;    // Offset of the memory reservation block
+    uint32_t _version;           // 17 for the layout described by this spec
+    uint32_t _last_comp_version; // Lowest backwards-compatible version (16)
+    uint32_t _boot_cpuid_phys;   // Physical ID of the boot CPU
+    uint32_t _size_dt_strings;   // Size of the strings block in bytes
+    uint32_t _size_dt_struct;    // Size of the structure block in bytes
   };
 
   // A flattened device tree blob in memory. The header occupies the first bytes;
   // every other block (memory reservations, structure, strings) is located via
   // offsets in the header. Because FDTHeader is the first member, a pointer to
   // a FlattenedDeviceTree can be reinterpret_cast to const FDTHeader*.
-  struct FlattenedDeviceTree {
-    FDTHeader header;
-  };
+  typedef FDTHeader FlattenedDeviceTree;
 
   // Structure block token values (big-endian 32-bit integers)
   enum class Token : uint32_t {
@@ -39,25 +92,16 @@ namespace DeviceTree {
 
   enum class Status {
     Ok,
-    BadMagic,          // Blob does not start with 0xd00dfeed
+    BadMagic,          // Blob does not start with Parser::FDT_MAGIC
     UnsupportedVersion,
     Malformed,         // Invalid offsets, sizes, or truncated data
   };
 
-  // ---------------------------------------------------------------------------
-  // Zero-allocation parser over a flattened device tree blob
+  // Zero-allocation streaming parser over a flattened device tree blob
   //
   // Validates the header and walks the structure block token by token, reading
   // node names and property data directly out of the blob (no copying, no heap
-  // allocation). The blob must remain valid for the lifetime of the parser
-  //
-  // Typical use:
-  //   DeviceTree::Parser dt;
-  //   if (dt.init(fdt) != DeviceTree::Status::Ok) { ... }
-  //   while (dt.next() != DeviceTree::Token::End) {
-  //     switch (dt.current()) { ... }
-  //   }
-  // ---------------------------------------------------------------------------
+  // allocation). The blob must remain valid for the lifetime of the parser.
   class Parser {
   private:
     static constexpr uint32_t FDT_MAGIC   = 0xD00DFEED;
@@ -90,19 +134,16 @@ namespace DeviceTree {
     // aligned (as required by the spec)
     Status init(const FlattenedDeviceTree* fdt);
 
-    // --- Header accessors (host byte order) ---
     uint32_t totalsize() const;
     uint32_t version() const;
     uint32_t last_comp_version() const;
     uint32_t boot_cpuid_phys() const;
 
-    // --- Memory reservation block ---
     // Fetches the index-th reservation entry (physical address, size in bytes)
     // Returns false once the terminating (0, 0) entry is reached, or if index
     // is out of range
     bool reserve_entry(uint32_t index, uint64_t& address, uint64_t& size) const;
 
-    // --- Structure block walking ---
     // Advances to the next token and returns it. FDT_NOP tokens are skipped
     // automatically. Returns Token::End once the structure block is exhausted
     // (and on any subsequent call). The first call returns the root node's
@@ -119,12 +160,14 @@ namespace DeviceTree {
     uint32_t    prop_len() const;    // Token::Prop:      value length in bytes
     uint32_t    depth() const;       // Number of open BeginNode tokens (0 = at root level)
 
-    // --- Convenience helpers ---
-    // Read a big-endian integer from an arbitrary byte pointer (e.g. a property
-    // value). Returns the value in host byte order
+    // Read a big-endian integer from an arbitrary byte pointer (e.g., a property
+    // value). Returns the value in host byte order.
     static uint32_t read_u32(const void* p);
     static uint64_t read_u64(const void* p);
+    static uint64_t read_prop(PropFrame* prop);
   };
+
+  Status parse_frames(FlattenedDeviceTree* fdt);
 
 } // namespace DeviceTree
 

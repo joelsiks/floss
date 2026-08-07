@@ -3,8 +3,10 @@
 
 #include <stdint.h>
 
+#include "DeviceTree.h"
+
 namespace UART {
-  void set_uart_base(uint64_t uart_base);
+  void dt_parse(DeviceTree::NodeFrame* node_frame);
 
   void pl011_toggle_rx_interrupts(bool on);
   void pl011_toggle_tx_interrupts(bool on);

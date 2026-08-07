@@ -1,6 +1,11 @@
 
 #include "uart.h"
 
+#include <cstring>
+
+#include "DeviceTree.h"
+#include "util/assert.h"
+
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
   volatile uint32_t DR;   // 0x00, Data Register,
@@ -17,8 +22,29 @@ struct MMDR_UART {
 
 static MMDR_UART* uart = nullptr;
 
-void UART::set_uart_base(uint64_t uart_base) {
-  uart = reinterpret_cast<MMDR_UART*>(uart_base);
+void UART::dt_parse(DeviceTree::NodeFrame* node_frame) {
+  // Iterate over all the props
+  for (uint32_t i = 0; i < node_frame->_nprops; i++) {
+    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+
+    if (strcmp(prop->_name, "reg") == 0) {
+      const void* current_value = prop->_value;
+      const uint32_t rp_size_bytes = node_frame->_parent_cells.byte_size();
+      const uint32_t num_reg_pairs = prop->_len / rp_size_bytes;
+
+      kassert(prop->_len % rp_size_bytes == 0, "Invalid reg length (%d, rp size %d)\n", prop->_len, rp_size_bytes);
+
+      DeviceTree::RegPair rp;
+      for (uint32_t j = 0; j < num_reg_pairs; j++) {
+        DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
+        if (j == 0) {
+          uart = reinterpret_cast<MMDR_UART*>(rp._address);
+        }
+
+        current_value = (const char*)current_value + rp_size_bytes;
+      }
+    }
+  }
 }
 
 // Bits for the Interrupt Mask Set Clear register

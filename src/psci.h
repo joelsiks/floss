@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "DeviceTree.h"
+
 // From the Power State Coordination Interface Manual:
 //   Operating systems typically perform much of the kernel boot process on one primary core, bringing
 //   secondary cores online at a later stage. For systems that support hotplug, the operations involved in
@@ -22,15 +24,8 @@
 // The PSCI functions/API accessed via Secure Monitor Call (SMC) (or Hypervisor Call (HVC) in some cases)
 // has its own calling convention (SMC64/SMC32).
 
-// The method used to call into the PSCI API. Depends on which level PSCI is implemented in (EL2/EL3).
-enum class PSCIMethod {
-  Hypervisor, // hvc
-  Supervisor  // smc
-};
-
 namespace PSCI {
-  void set_cpu_on(uint64_t cpu_on);
-  void set_method(const char* method_str);
+  void dt_parse(DeviceTree::NodeFrame* node_frame);
 
   int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
 };

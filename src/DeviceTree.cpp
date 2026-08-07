@@ -1,4 +1,12 @@
+
 #include "DeviceTree.h"
+
+#include <cstring>
+
+#include "GIC.h"
+#include "psci.h"
+#include "uart.h"
+#include "util/assert.h"
 
 // Read a big-endian 32-bit integer from a byte pointer
 static uint32_t be32(const void* p) {
@@ -12,6 +20,43 @@ static uint64_t be64(const void* p) {
   return (uint64_t(be32(p)) << 32) | be32(static_cast<const uint8_t*>(p) + 4);
 }
 
+static const DeviceTree::NodeHandler _node_handlers[] = {
+  { ._compatible = "arm,psci", ._on_node = PSCI::dt_parse },
+  { ._compatible = "arm,pl011", ._on_node = UART::dt_parse },
+  { ._compatible = "arm,gic-v3", ._on_node = GIC::v3::dt_parse },
+};
+
+static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
+
+void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp) {
+  // The reg property encodes an arbitrary number of (address, length) pairs
+  const void* address_value = value;
+
+  // Read address field
+  uint64_t address = 0;
+  if (cells->_address == 1) {
+    address = DeviceTree::Parser::read_u32(address_value);
+  } else if (cells->_address == 2) {
+    address = DeviceTree::Parser::read_u64(address_value);
+  }
+
+  // Advance the value
+  const void* length_value = (const char*)value + cells->_address * NodeCells::BytesPerUnit;
+
+  // Read length field
+  uint64_t length = 0;
+  if (cells->_size == 0) {
+    // Don't read anything
+  } else if (cells->_size == 1) {
+    length = DeviceTree::Parser::read_u32(length_value);
+  } else if (cells->_size == 2) {
+    length = DeviceTree::Parser::read_u64(length_value);
+  }
+
+  out_rp->_address = address;
+  out_rp->_length = length;
+}
+
 DeviceTree::Status DeviceTree::Parser::init(const FlattenedDeviceTree* fdt) {
   _valid = false;
 
@@ -23,21 +68,21 @@ DeviceTree::Status DeviceTree::Parser::init(const FlattenedDeviceTree* fdt) {
   _blob = reinterpret_cast<const uint8_t*>(fdt);
 
   // Validate magic and version
-  if (be32(&_header->magic) != FDT_MAGIC) {
+  if (be32(&_header->_magic) != FDT_MAGIC) {
     return Status::BadMagic;
   }
 
-  if (be32(&_header->version) < FDT_SUPPORTED_VERSION) {
+  if (be32(&_header->_version) < FDT_SUPPORTED_VERSION) {
     return Status::UnsupportedVersion;
   }
 
   // Read header fields into host byte order
-  const uint32_t totalsize = be32(&_header->totalsize);
-  const uint32_t off_struct = be32(&_header->off_dt_struct);
-  const uint32_t off_strings = be32(&_header->off_dt_strings);
-  const uint32_t off_rsvmap = be32(&_header->off_mem_rsvmap);
-  const uint32_t size_struct = be32(&_header->size_dt_struct);
-  const uint32_t size_strings = be32(&_header->size_dt_strings);
+  const uint32_t totalsize = be32(&_header->_totalsize);
+  const uint32_t off_struct = be32(&_header->_off_dt_struct);
+  const uint32_t off_strings = be32(&_header->_off_dt_strings);
+  const uint32_t off_rsvmap = be32(&_header->_off_mem_rsvmap);
+  const uint32_t size_struct = be32(&_header->_size_dt_struct);
+  const uint32_t size_strings = be32(&_header->_size_dt_strings);
 
   // Every block must fit entirely within the blob
   if (uint64_t(off_struct) + size_struct > totalsize ||
@@ -65,19 +110,19 @@ DeviceTree::Status DeviceTree::Parser::init(const FlattenedDeviceTree* fdt) {
 }
 
 uint32_t DeviceTree::Parser::totalsize() const {
-  return (_header != nullptr) ? be32(&_header->totalsize) : 0;
+  return (_header != nullptr) ? be32(&_header->_totalsize) : 0;
 }
 
 uint32_t DeviceTree::Parser::version() const {
-  return (_header != nullptr) ? be32(&_header->version) : 0;
+  return (_header != nullptr) ? be32(&_header->_version) : 0;
 }
 
 uint32_t DeviceTree::Parser::last_comp_version() const {
-  return (_header != nullptr) ? be32(&_header->last_comp_version) : 0;
+  return (_header != nullptr) ? be32(&_header->_last_comp_version) : 0;
 }
 
 uint32_t DeviceTree::Parser::boot_cpuid_phys() const {
-  return (_header != nullptr) ? be32(&_header->boot_cpuid_phys) : 0;
+  return (_header != nullptr) ? be32(&_header->_boot_cpuid_phys) : 0;
 }
 
 bool DeviceTree::Parser::reserve_entry(uint32_t index, uint64_t& address, uint64_t& size) const {
@@ -85,7 +130,7 @@ bool DeviceTree::Parser::reserve_entry(uint32_t index, uint64_t& address, uint64
     return false;
   }
 
-  const uint8_t* p = _blob + be32(&_header->off_mem_rsvmap) + 16 * index;
+  const uint8_t* p = _blob + be32(&_header->_off_mem_rsvmap) + 16 * index;
   if (p + 16 > _blob_end) {
     return false;
   }
@@ -229,3 +274,122 @@ uint64_t DeviceTree::Parser::read_u64(const void* p) {
   return be64(p);
 }
 
+uint64_t DeviceTree::Parser::read_prop(DeviceTree::PropFrame* prop) {
+  if (prop->_len == 4) {
+    return read_u32(prop->_value);
+  } else if (prop->_len == 8) {
+    return read_u64(prop->_value);
+  }
+
+  kpanic("Bad prop length for Parser::read_prop");
+  return 0;
+}
+
+// Returns true if any NULL-separated string in the "compatible" list equals
+// needle. The list is value[0..len), where strings are separated by '\0';
+// the final string may or may not be '\0'-terminated within len bytes.
+static bool compatible_list_contains(const char* value, uint32_t len, const char* needle) {
+  uint32_t offset = 0;
+  while (offset < len) {
+    const char* s = value + offset;  // start of this candidate
+    uint32_t rest = len - offset;    // bytes remaining in buffer
+    uint32_t slen = strnlen(s, rest); // candidate length, bounded by rest
+
+    // Exact match against the handler name
+    if (strlen(needle) == slen && strncmp(s, needle, slen) == 0) {
+      return true;
+    }
+
+    offset += slen;
+    if (offset < len && value[offset] == '\0') {
+      offset++;
+    }
+  }
+
+  return false;
+}
+
+DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt) {
+  Parser dtp;
+
+  Status init_status = dtp.init(fdt);
+  if (init_status != Status::Ok) {
+    return init_status;
+  }
+
+  ParsingFrame parsing_frame;
+  parsing_frame._top = 0;
+
+  while (dtp.next() != Token::End) {
+    switch (dtp.current()) {
+      case Token::BeginNode: {
+        if (strcmp(dtp.node_name(), "") != 0) {
+          // This is not the root node
+
+          const NodeCells parent_cells = parsing_frame.current()->_own_cells;
+
+          parsing_frame._top++;
+          kpostcond(parsing_frame._top < MaxNodeDepth);
+
+          parsing_frame.current()->_parent_cells = parent_cells;
+        }
+
+        parsing_frame.current()->_name = dtp.node_name();
+        parsing_frame.current()->_compatible_prop = nullptr;
+        parsing_frame.current()->_nprops = 0;
+        break;
+      }
+      case Token::EndNode: {
+        // Iterate over the NodeHandler entries in _node_handler to see if this
+        // node should be handled. We match on the compatible prop, and not all
+        // nodes have a compatible prop.
+        PropFrame* compatible_prop = parsing_frame.current()->_compatible_prop;
+
+        if (compatible_prop != nullptr) {
+          for (uint32_t i = 0; i < NumNodeHandlers; i++) {
+            if (compatible_list_contains(reinterpret_cast<const char*>(compatible_prop->_value),
+                                         compatible_prop->_len,
+                                         _node_handlers[i]._compatible)) {
+              // Found it in the table!
+              _node_handlers[i]._on_node(parsing_frame.current());
+              break;
+            }
+          }
+        }
+
+        // Move down in the parsing frame stack. The _top value is 0 if the node
+        // end is for the root node.
+        if (parsing_frame._top > 0) {
+          parsing_frame._top--;
+        }
+      }
+      break;
+      case Token::Prop:
+        if (strcmp(dtp.prop_name(), "#address-cells") == 0) {
+          parsing_frame.current()->_own_cells._address = Parser::read_u32(dtp.prop_value());
+        } else if (strcmp(dtp.prop_name(), "#size-cells") == 0) {
+          parsing_frame.current()->_own_cells._size = Parser::read_u32(dtp.prop_value());
+        } else {
+          // Store the prop data in the current slot
+          parsing_frame.current()->current_prop()->_name = dtp.prop_name();
+          parsing_frame.current()->current_prop()->_value = dtp.prop_value();
+          parsing_frame.current()->current_prop()->_len = dtp.prop_len();
+
+          // Check if the current prop is the compatible prop and store it
+          if (strcmp(dtp.prop_name(), "compatible") == 0) {
+            parsing_frame.current()->_compatible_prop = parsing_frame.current()->current_prop();
+          }
+
+          parsing_frame.current()->_nprops++;
+          kpostcond(parsing_frame.current()->_nprops < MaxPropsPerNode);
+        }
+        break;
+      case Token::End:
+        break;
+      case Token::Nop:
+        continue;
+    }
+  }
+
+  return Status::Ok;
+}

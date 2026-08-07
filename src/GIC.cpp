@@ -1,6 +1,11 @@
 
 #include "GIC.h"
+
+#include <cstring>
+
+#include "DeviceTree.h"
 #include "kstdio.h"
+#include "util/assert.h"
 
 // The Distributor, Redistributor, and Interrupt Translation Service (ITS) are
 // collectively known as an Interrupt Routing Infrastructure (IRI). There is one
@@ -24,12 +29,14 @@ struct MMDR_GICD {
   volatile uint32_t IIDR;
 };
 
-static const uintptr_t GICD_BASE = 0x08000000;
+static uintptr_t GICD_BASE{0};
 static const uintptr_t GICD_IGROUPR = 0x80;
 static const uintptr_t GICD_ISENABLER = 0x100;
 
 static const uintptr_t GICD_IPRIORITY_BASE = 0x400;
 static const uintptr_t GICD_IROUTER = 0x6000;
+
+static MMDR_GICD* gicd = nullptr;
 
 static volatile uint32_t* distributor(uintptr_t offset = 0) {
   return reinterpret_cast<volatile uint32_t*>(GICD_BASE + offset);
@@ -38,9 +45,6 @@ static volatile uint32_t* distributor(uintptr_t offset = 0) {
 static volatile uint64_t* distributor_wide(uintptr_t offset = 0) {
   return reinterpret_cast<volatile uint64_t*>(GICD_BASE + offset);
 }
-
-// TODO: This should really be found using the Device Tree
-static MMDR_GICD* const gicd = reinterpret_cast<MMDR_GICD*>(GICD_BASE);
 
 // Memory Mapped Device Register for the Redistributor
 struct MMDR_GICR_RD {
@@ -51,7 +55,7 @@ struct MMDR_GICR_RD {
   volatile uint32_t WAKER;
 };
 
-static const uintptr_t GICR_BASE = 0x080A0000;
+static uintptr_t GICR_BASE{0};
 static const uintptr_t GICR_STRIDE = 0x20000;
 static const uintptr_t GICR_SD_OFFSET = 0;
 static const uintptr_t GICR_SGI_OFFSET = 0x10000;
@@ -73,6 +77,34 @@ static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
 static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
 static const uint32_t GICD_CTLR_E1NWF = 0b10000000; // Enable 1 of N Wakeup Functionality
+
+void GIC::v3::dt_parse(DeviceTree::NodeFrame* node_frame) {
+  // Iterate over all the props
+  for (uint32_t i = 0; i < node_frame->_nprops; i++) {
+    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+
+    if (strcmp(prop->_name, "reg") == 0) {
+      const void* current_value = prop->_value;
+      const uint32_t rp_size_bytes = node_frame->_parent_cells.byte_size();
+      const uint32_t num_reg_pairs = prop->_len / rp_size_bytes;
+
+      kassert(prop->_len % rp_size_bytes == 0, "Invalid reg length (%d, rp size %d)\n", prop->_len, rp_size_bytes);
+
+      DeviceTree::RegPair rp;
+      for (uint32_t j = 0; j < num_reg_pairs; j++) {
+        DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
+        if (j == 0) {
+          GICD_BASE = reinterpret_cast<uintptr_t>(rp._address);
+          gicd = reinterpret_cast<MMDR_GICD*>(rp._address);
+        } else if (j == 1) {
+          GICR_BASE = reinterpret_cast<uintptr_t>(rp._address);
+        }
+
+        current_value = (const char*)current_value + rp_size_bytes;
+      }
+    }
+  }
+}
 
 void GIC::v3::initialize_gic_distributor() {
   // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.

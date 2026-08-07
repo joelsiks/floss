@@ -5,12 +5,14 @@
 #include "psci.h"
 #include "util/assert.h"
 
+// The method used to call into the PSCI API. Depends on which level PSCI is implemented in (EL2/EL3).
+enum class PSCIMethod {
+  Hypervisor, // hvc
+  Supervisor  // smc
+};
+
 static uint64_t PSCI_CPU_ON{0};
 static PSCIMethod PSCI_METHOD;
-
-void PSCI::set_cpu_on(uint64_t cpu_on) {
-  PSCI_CPU_ON = cpu_on;
-}
 
 static PSCIMethod psci_method_from_str(const char* method_str) {
   if (strcmp(method_str, "hvc") == 0) {
@@ -23,8 +25,15 @@ static PSCIMethod psci_method_from_str(const char* method_str) {
   return PSCIMethod::Supervisor;
 }
 
-void PSCI::set_method(const char* method_str) {
-  PSCI_METHOD = psci_method_from_str(method_str);
+void PSCI::dt_parse(DeviceTree::NodeFrame* node_frame) {
+  for (uint32_t i = 0; i < node_frame->_nprops; i++) {
+    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+    if (strcmp(prop->_name, "cpu_on") == 0) {
+      PSCI_CPU_ON = DeviceTree::Parser::read_prop(prop);
+    } else if (strcmp(prop->_name, "method") == 0) {
+      PSCI_METHOD = psci_method_from_str(reinterpret_cast<const char*>(prop->_value));
+    }
+  }
 }
 
 int32_t PSCI::boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint64_t context_id) {

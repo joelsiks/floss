@@ -26,7 +26,7 @@ fi
 # inside gdb to attach to QEMU's gdbserver and `continue`.
 if [[ "${FLOSS_GDB:-0}" == "1" ]]; then
     if [[ -n "${TMUX:-}" ]]; then
-        tmux split-window -h "exec gdb-multiarch '${KERNEL}' -ex 'target remote :1234' -ex 'layout asm'"
+        tmux split-window -h "exec gdb-multiarch '${KERNEL}' -ex 'target remote :1234' -ex 'layout src'"
     else
         echo "note: not inside tmux; skipping auto gdb pane." >&2
         echo "      attach manually:  gdb-multiarch ${KERNEL}" >&2
@@ -45,6 +45,11 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 # -d int             : prints exceptions to the terminal
 # Any extra args passed to this script are forwarded to QEMU, e.g.
 #   ./scripts/run-qemu.sh build/floss_kernel -S   # pause at startup for gdb
+#
+# Use the following options and commands to dump the DeviceTree to a plain text
+# file:
+#   QEMU Option(s): -M dumpdtb=dump.dtb
+#   Command line dtb -> dts: dtc -I dtb -O dts -o device-tree-plain-text.dts dump.dtb
 exec qemu-system-aarch64 \
     -M virt,gic-version=3 \
     -cpu cortex-a53 \
