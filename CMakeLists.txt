@@ -21,20 +21,20 @@ endif()
 # --- Bare-metal / freestanding options ---------------------------------------
 # Applied to every target in the tree via directory-level properties.
 add_compile_options(
-    -ffreestanding          # We don't assume a hosted C environment / libc
-    -fno-pie                # Fixed load address, not position-independent
+    -ffreestanding      # We don't assume a hosted C environment / libc
+    -fno-pie            # Fixed load address, not position-independent
     -fno-pic
-    -mgeneral-regs-only     # Avoid FP/SIMD regs (for now)
+    -mgeneral-regs-only # Avoid FP/SIMD regs (for now)
     -Wall -Wextra
     -fno-exceptions
     -fno-rtti
 )
 
 add_link_options(
-    -nostdlib               # Don't link the C standard library
-    -nostartfiles           # Don't link crt0/startup files; we provide our own
-    -no-pie                 # Produce a static, non-PIE executable
-    -Wl,--build-id=none     # No .note.gnu.build-id section
+    -nostdlib           # Don't link the C standard library
+    -nostartfiles       # Don't link crt0/startup files; we provide our own
+    -no-pie             # Produce a static, non-PIE executable
+    -Wl,--build-id=none # No .note.gnu.build-id section
 )
 
 # --- Kernel image ------------------------------------------------------------
