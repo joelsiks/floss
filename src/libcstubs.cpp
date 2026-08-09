@@ -4,8 +4,6 @@
 #include "util/assert.h"
 
 void memset(void* ptr, int c, size_t n) {
-  kprecond(c >= 0 && c < 256);
-
   char* const memory = reinterpret_cast<char*>(ptr);
   for (size_t i = 0; i < n; i++) {
     memory[i] = (char)c;

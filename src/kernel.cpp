@@ -5,6 +5,7 @@
 #include "exception.h"
 #include "GIC.h"
 #include "kstdio.h"
+#include "memory/map.h"
 #include "psci.h"
 #include "uart.h"
 
@@ -23,6 +24,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   if (status != DeviceTree::Status::Ok) {
     return;
   }
+
+  Memory::Map::init(fdt);
 
   const uint64_t el = Exception::get_exception_level();
   kprintf("Kernel running at exception level: %d\n", el);

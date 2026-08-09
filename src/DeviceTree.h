@@ -169,7 +169,7 @@ namespace DeviceTree {
     // Fetches the index-th reservation entry (physical address, size in bytes)
     // Returns false once the terminating (0, 0) entry is reached, or if index
     // is out of range
-    bool reserve_entry(uint32_t index, uint64_t& address, uint64_t& size) const;
+    bool reserve_entry(uint32_t index, uint64_t* out_address, uint64_t* out_size) const;
 
     // Advances to the next token and returns it. FDT_NOP tokens are skipped
     // automatically. Returns Token::End once the structure block is exhausted

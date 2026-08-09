@@ -29,7 +29,7 @@ struct MMDR_GICD {
   volatile uint32_t IIDR;
 };
 
-static uintptr_t GICD_BASE{0};
+static uintptr_t GICD_BASE = 0;
 static const uintptr_t GICD_IGROUPR = 0x80;
 static const uintptr_t GICD_ISENABLER = 0x100;
 
@@ -55,7 +55,7 @@ struct MMDR_GICR_RD {
   volatile uint32_t WAKER;
 };
 
-static uintptr_t GICR_BASE{0};
+static uintptr_t GICR_BASE = 0;
 static const uintptr_t GICR_STRIDE = 0x20000;
 static const uintptr_t GICR_SD_OFFSET = 0;
 static const uintptr_t GICR_SGI_OFFSET = 0x10000;

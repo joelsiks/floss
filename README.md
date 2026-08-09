@@ -4,9 +4,9 @@ A from-scratch, bare-metal operating system (OS) for AArch64 (ARMv8), built in f
 
 Core features:
  - Generic Interrupt Controller (GIC), configure and route both PPI (per-core) and SPI (shared) interrupts via the GIC Distributor + Redistributor
- - SMP bring-up via PSCI, secondary cores are bootem from EL1 using the PSCI `CPU_ON` interface with an assembly trampoline entry (start.S, _secondary_start)
+ - SMP bring-up via PSCI, secondary cores are booted from EL1 using the PSCI `CPU_ON` interface with an assembly trampoline entry (start.S, _secondary_start)
  - PL011 UART, MMIO-driven serial output and RX interrupt-driven input, no libc (kstdio provides what printf/putc would)
- - Streaming DeviceTree parser, walks a flattened device tree node-by-node and dispatches to subsystems (GIC/PSCI/UART) to discover MMIO addresses (instead of hardcoding them)
+ - Streaming DeviceTree parser, walks a flattened device tree node-by-node and dispatches to subsystems (GIC/PSCI/UART) to discover MMIO addresses instead of hardcoding them
  - Exception handling, AArch64 exception vectors (exceptions.S), exception-level detection, interrupt masking
  - Timer, a generic timer that fires predictable periodic interrupts
 

@@ -126,7 +126,7 @@ uint32_t DeviceTree::Parser::boot_cpuid_phys() const {
   return (_header != nullptr) ? be32(&_header->_boot_cpuid_phys) : 0;
 }
 
-bool DeviceTree::Parser::reserve_entry(uint32_t index, uint64_t& address, uint64_t& size) const {
+bool DeviceTree::Parser::reserve_entry(uint32_t index, uint64_t* out_address, uint64_t* out_size) const {
   if (!_valid) {
     return false;
   }
@@ -136,11 +136,11 @@ bool DeviceTree::Parser::reserve_entry(uint32_t index, uint64_t& address, uint64
     return false;
   }
 
-  address = be64(p);
-  size = be64(p + 8);
+  *out_address = be64(p);
+  *out_size = be64(p + 8);
 
   // The list is terminated by an entry with both address and size set to 0
-  return address != 0 || size != 0;
+  return *out_address != 0 || *out_size != 0;
 }
 
 DeviceTree::Token DeviceTree::Parser::next() {
