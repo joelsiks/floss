@@ -6,7 +6,7 @@
 #include "DeviceTree.h"
 
 namespace UART {
-  void dt_parse(DeviceTree::NodeFrame* node_frame);
+  void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
   void pl011_toggle_rx_interrupts(bool on);
   void pl011_toggle_tx_interrupts(bool on);

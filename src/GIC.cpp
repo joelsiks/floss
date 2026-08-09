@@ -78,10 +78,10 @@ static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
 static const uint32_t GICD_CTLR_E1NWF = 0b10000000; // Enable 1 of N Wakeup Functionality
 
-void GIC::v3::dt_parse(DeviceTree::NodeFrame* node_frame) {
+void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
-    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+    const DeviceTree::PropFrame* prop = &node_frame->_props[i];
 
     if (strcmp(prop->_name, "reg") == 0) {
       const void* current_value = prop->_value;

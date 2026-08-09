@@ -7,7 +7,7 @@
 
 namespace GIC {
   namespace v3 {
-    void dt_parse(DeviceTree::NodeFrame* node_frame);
+    void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
     void initialize_gic_distributor();
     void initialize_gic_redistributors();

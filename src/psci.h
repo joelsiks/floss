@@ -25,7 +25,7 @@
 // has its own calling convention (SMC64/SMC32).
 
 namespace PSCI {
-  void dt_parse(DeviceTree::NodeFrame* node_frame);
+  void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
   int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
 };

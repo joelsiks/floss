@@ -22,10 +22,10 @@ struct MMDR_UART {
 
 static MMDR_UART* uart = nullptr;
 
-void UART::dt_parse(DeviceTree::NodeFrame* node_frame) {
+void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
-    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+    const DeviceTree::PropFrame* prop = &node_frame->_props[i];
 
     if (strcmp(prop->_name, "reg") == 0) {
       const void* current_value = prop->_value;

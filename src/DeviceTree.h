@@ -3,6 +3,24 @@
 
 #include <cstdint>
 
+// From QEMU virt documentation https://www.qemu.org/docs/master/system/arm/virt.html
+//
+// The virt board automatically generates a device tree blob (“dtb”) which it
+// passes to the guest. This provides information about the addresses, interrupt
+// lines and other configuration of the various devices in the system. Guest code
+// can rely on and hard-code the following addresses:
+//
+// Flash memory starts at address 0x0000_0000
+//   The flash memory contains memory mapped (device) registers (MMIO)
+//   Area 0x0000_0000 to 0x3FFF_FFFF
+//
+// RAM starts at 0x4000_0000
+//   The area 0x4000_0000 - 0x4007_FFFF is reserved for bootloader
+//   Kernel is loaded at 0x4008_0000
+//
+// All other information about device locations may change between QEMU versions,
+// so guest code must look in the DTB.
+
 namespace DeviceTree {
   // Gives a total static allocation size of:
   // MaxNodeDepth * sizeof(PropFrame) * MaxPropsPerNode
@@ -30,13 +48,16 @@ namespace DeviceTree {
 
   struct NodeFrame {
     const char* _name;
-    PropFrame*  _compatible_prop;
     NodeCells   _parent_cells;
     NodeCells   _own_cells;
     uint32_t    _nprops;
+    int         _compatible_prop_idx{-1};
+    int         _device_type_prop_idx{-1};
     PropFrame   _props[MaxPropsPerNode];
 
     inline PropFrame* current_prop() { return &_props[_nprops]; }
+    inline PropFrame* compatible_prop() { return _compatible_prop_idx < 0 ? nullptr : &_props[_compatible_prop_idx]; }
+    inline PropFrame* device_type_prop() { return _device_type_prop_idx < 0 ? nullptr : &_props[_device_type_prop_idx]; }
   };
 
   struct ParsingFrame {
@@ -47,8 +68,8 @@ namespace DeviceTree {
   };
 
   struct NodeHandler {
-    const char* _compatible;
-    void (*_on_node)(DeviceTree::NodeFrame*);
+    const char* _match_string;
+    void (*_on_node)(const DeviceTree::NodeFrame*);
   };
 
   // A pair of (address, length) values stored in the "reg" property of a node
@@ -164,7 +185,7 @@ namespace DeviceTree {
     // value). Returns the value in host byte order.
     static uint32_t read_u32(const void* p);
     static uint64_t read_u64(const void* p);
-    static uint64_t read_prop(PropFrame* prop);
+    static uint64_t read_prop(const PropFrame* prop);
   };
 
   Status parse_frames(FlattenedDeviceTree* fdt);

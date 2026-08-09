@@ -25,9 +25,9 @@ static PSCIMethod psci_method_from_str(const char* method_str) {
   return PSCIMethod::Supervisor;
 }
 
-void PSCI::dt_parse(DeviceTree::NodeFrame* node_frame) {
+void PSCI::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
-    DeviceTree::PropFrame* prop = &node_frame->_props[i];
+    const DeviceTree::PropFrame* prop = &node_frame->_props[i];
     if (strcmp(prop->_name, "cpu_on") == 0) {
       PSCI_CPU_ON = DeviceTree::Parser::read_prop(prop);
     } else if (strcmp(prop->_name, "method") == 0) {

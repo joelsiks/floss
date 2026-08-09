@@ -7,6 +7,7 @@
 #include "psci.h"
 #include "uart.h"
 #include "util/assert.h"
+#include "memory/map.h"
 
 // Read a big-endian 32-bit integer from a byte pointer
 static uint32_t be32(const void* p) {
@@ -20,13 +21,19 @@ static uint64_t be64(const void* p) {
   return (uint64_t(be32(p)) << 32) | be32(static_cast<const uint8_t*>(p) + 4);
 }
 
-static const DeviceTree::NodeHandler _node_handlers[] = {
-  { ._compatible = "arm,psci", ._on_node = PSCI::dt_parse },
-  { ._compatible = "arm,pl011", ._on_node = UART::dt_parse },
-  { ._compatible = "arm,gic-v3", ._on_node = GIC::v3::dt_parse },
+static const DeviceTree::NodeHandler _node_handlers_compatible[] = {
+  { ._match_string = "arm,psci", ._on_node = PSCI::dt_parse },
+  { ._match_string = "arm,pl011", ._on_node = UART::dt_parse },
+  { ._match_string = "arm,gic-v3", ._on_node = GIC::v3::dt_parse },
 };
 
-static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
+static const uint32_t NumNodeHandlersCompatible = sizeof(_node_handlers_compatible) / sizeof(DeviceTree::NodeHandler);
+
+static const DeviceTree::NodeHandler _node_handlers_device_type[] = {
+  { ._match_string = "memory", ._on_node = Memory::Map::dt_parse },
+};
+
+static const uint32_t NumNodeHandlersDeviceType = sizeof(_node_handlers_device_type) / sizeof(DeviceTree::NodeHandler);
 
 void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp) {
   // The reg property encodes an arbitrary number of (address, length) pairs
@@ -274,7 +281,7 @@ uint64_t DeviceTree::Parser::read_u64(const void* p) {
   return be64(p);
 }
 
-uint64_t DeviceTree::Parser::read_prop(DeviceTree::PropFrame* prop) {
+uint64_t DeviceTree::Parser::read_prop(const DeviceTree::PropFrame* prop) {
   if (prop->_len == 4) {
     return read_u32(prop->_value);
   } else if (prop->_len == 8) {
@@ -309,6 +316,24 @@ static bool compatible_list_contains(const char* value, uint32_t len, const char
   return false;
 }
 
+static void dispatch_if_prop_match(const DeviceTree::NodeFrame* node_frame,
+                                   const DeviceTree::PropFrame* compatible_prop,
+                                   const DeviceTree::NodeHandler* node_handlers,
+                                   uint32_t num_node_handlers) {
+  kprecond(compatible_prop != nullptr);
+
+  // Iterate over the NodeHandler entries in node_handlers to see if this node
+  // should be handled
+  for (uint32_t i = 0; i < num_node_handlers; i++) {
+    if (compatible_list_contains(reinterpret_cast<const char*>(compatible_prop->_value),
+                                 compatible_prop->_len,
+                                 node_handlers[i]._match_string)) {
+      // Found it in the table!
+      node_handlers[i]._on_node(node_frame);
+    }
+  }
+}
+
 DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt) {
   Parser dtp;
 
@@ -325,7 +350,6 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
       case Token::BeginNode: {
         if (strcmp(dtp.node_name(), "") != 0) {
           // This is not the root node
-
           const NodeCells parent_cells = parsing_frame.current()->_own_cells;
 
           parsing_frame._top++;
@@ -335,26 +359,24 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
         }
 
         parsing_frame.current()->_name = dtp.node_name();
-        parsing_frame.current()->_compatible_prop = nullptr;
         parsing_frame.current()->_nprops = 0;
         break;
       }
       case Token::EndNode: {
-        // Iterate over the NodeHandler entries in _node_handler to see if this
-        // node should be handled. We match on the compatible prop, and not all
-        // nodes have a compatible prop.
-        PropFrame* compatible_prop = parsing_frame.current()->_compatible_prop;
-
+        const PropFrame* const compatible_prop = parsing_frame.current()->compatible_prop();
         if (compatible_prop != nullptr) {
-          for (uint32_t i = 0; i < NumNodeHandlers; i++) {
-            if (compatible_list_contains(reinterpret_cast<const char*>(compatible_prop->_value),
-                                         compatible_prop->_len,
-                                         _node_handlers[i]._compatible)) {
-              // Found it in the table!
-              _node_handlers[i]._on_node(parsing_frame.current());
-              break;
-            }
-          }
+          dispatch_if_prop_match(parsing_frame.current(),
+                                 compatible_prop,
+                                 _node_handlers_compatible,
+                                 NumNodeHandlersCompatible);
+        }
+
+        const PropFrame* const device_type_prop = parsing_frame.current()->device_type_prop();
+        if (device_type_prop != nullptr) {
+          dispatch_if_prop_match(parsing_frame.current(),
+                                 device_type_prop,
+                                 _node_handlers_device_type,
+                                 NumNodeHandlersDeviceType);
         }
 
         // Move down in the parsing frame stack. The _top value is 0 if the node
@@ -375,9 +397,12 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
           parsing_frame.current()->current_prop()->_value = dtp.prop_value();
           parsing_frame.current()->current_prop()->_len = dtp.prop_len();
 
-          // Check if the current prop is the compatible prop and store it
+          // Check if the current prop is one that we should keep track of for
+          // matching handlers with
           if (strcmp(dtp.prop_name(), "compatible") == 0) {
-            parsing_frame.current()->_compatible_prop = parsing_frame.current()->current_prop();
+            parsing_frame.current()->_compatible_prop_idx = parsing_frame.current()->_nprops;
+          } else if (strcmp(dtp.prop_name(), "device_type") == 0) {
+            parsing_frame.current()->_device_type_prop_idx = parsing_frame.current()->_nprops;
           }
 
           parsing_frame.current()->_nprops++;
