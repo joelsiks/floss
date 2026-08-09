@@ -67,8 +67,14 @@ namespace DeviceTree {
     inline NodeFrame* current() { return &_node_frame[_top]; }
   };
 
+  enum class MatchKind {
+    Compatible,
+    DeviceType,
+  };
+
   struct NodeHandler {
     const char* _match_string;
+    const MatchKind _match_kind;
     void (*_on_node)(const DeviceTree::NodeFrame*);
   };
 
