@@ -53,7 +53,7 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 exec qemu-system-aarch64 \
     -M virt,gic-version=3 \
     -cpu cortex-a53 \
-    -m 128M \
+    -m 2G \
     -nographic \
     -no-reboot \
     -gdb tcp::1234 \
