@@ -1,18 +1,20 @@
 
+#include "psci.h"
+
 #include <cstdint>
 #include <cstring>
 
-#include "psci.h"
 #include "util/assert.h"
 
-// The method used to call into the PSCI API. Depends on which level PSCI is implemented in (EL2/EL3).
+// The method used to call into the PSCI API.
+// Depends on which level PSCI is implemented in (EL2/EL3).
 enum class PSCIMethod {
   Hypervisor, // hvc
   Supervisor  // smc
 };
 
-static uint64_t PSCI_CPU_ON{0};
-static PSCIMethod PSCI_METHOD;
+static uint64_t PSCI_CPU_ON = 0;
+static PSCIMethod PSCI_METHOD = PSCIMethod::Supervisor; // Sane default
 
 static PSCIMethod psci_method_from_str(const char* method_str) {
   if (strcmp(method_str, "hvc") == 0) {
@@ -43,11 +45,11 @@ int32_t PSCI::boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint6
   //   Have not yet been booted into the calling supervisory software.
   //   Have been previously powered down with a CPU_OFF call.
   //
-  // We'll mainly use this for the first reason, to power up cores that have
-  // not yet been booted.
+  // We'll mainly use this for the first reason, to power up cores that have not
+  // yet been booted.
 
   // Three uint64_t arguments if we're using the SMC64 CC. Arguments are passed
-  // in x1-x17, with the "Function Identifier" in x0.
+  // in x1-x17, with the function identifier in x0.
 
   // Function identifier
   register uint64_t r0 __asm__("x0") = PSCI_CPU_ON;

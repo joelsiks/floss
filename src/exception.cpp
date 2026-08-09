@@ -8,6 +8,7 @@ uint64_t Exception::get_exception_level() {
   uint64_t el;
   asm("mrs %0, CurrentEL" : "=r" (el));
   el = el >> 2 & 0b11;
+
   return el;
 }
 
@@ -19,6 +20,7 @@ uint64_t Exception::get_cpuid() {
     "
     : "=r"(mpidr) :: "memory"
   );
+
   return mpidr;
 }
 

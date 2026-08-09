@@ -31,7 +31,6 @@ static const DeviceTree::NodeHandler _node_handlers[] = {
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
 
 void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp) {
-  // The reg property encodes an arbitrary number of (address, length) pairs
   const void* address_value = value;
 
   // Read address field

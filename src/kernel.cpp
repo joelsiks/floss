@@ -18,7 +18,7 @@ extern "C" void* _secondary_start;
 
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   // Start by parsing the flattened device tree so that we have MMIO addresses
-  // set up before continuing the setup of the OS.
+  // set up before continuing the setup of the OS
   DeviceTree::Status status = DeviceTree::parse_frames(fdt);
   if (status != DeviceTree::Status::Ok) {
     return;
