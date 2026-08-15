@@ -6,6 +6,7 @@
 #include "GIC.h"
 #include "kstdio.h"
 #include "memory/map.h"
+#include "memory/mmu.h"
 #include "psci.h"
 #include "uart.h"
 
@@ -38,6 +39,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   Exception::unmask_interrupts();
 
   UART::pl011_toggle_rx_interrupts(true);
+
+  MMU::setup_idmap_page_tables();
 
   PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
 }
