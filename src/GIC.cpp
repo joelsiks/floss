@@ -77,6 +77,7 @@ static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
 static const uint32_t GICD_CTLR_Group0   = 0b01;
 static const uint32_t GICD_CTLR_Group1NS = 0b10;
 static const uint32_t GICD_CTLR_E1NWF = 0b10000000; // Enable 1 of N Wakeup Functionality
+static const uint32_t GICD_CTLR_RWP = 1u << 31;
 
 void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -113,7 +114,7 @@ void GIC::v3::initialize_gic_distributor() {
   gicd->CTLR = ctlr;
 
   // Ensure write to GICD_CTLR has completed before continuing
-  asm volatile ("dsb sy" ::: "memory");
+  while ((gicd->CTLR & GICD_CTLR_RWP) != 0) { }
 }
 
 static const uint32_t GICR_TYPER_Last = 0b10000;
