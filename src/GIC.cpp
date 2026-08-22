@@ -22,56 +22,53 @@
 // of 0-31. SGI (and LPI?) are handled by the Distributor and have INTIDs of
 // 32-1023 (maybe more?)
 
-// Memory Mapped Device Register for the Distributor
-struct MMDR_GICD {
-  volatile uint32_t CTLR;
-  volatile uint32_t TYPER;
-  volatile uint32_t IIDR;
-};
-
 static uintptr_t GICD_BASE = 0;
+
+// Memory Mapped Device Registers for the Distributor
+static const uintptr_t GICD_CTLR = 0x0000;
+static const uintptr_t GICD_TYPER = 0x0004;
 static const uintptr_t GICD_IGROUPR = 0x80;
 static const uintptr_t GICD_ISENABLER = 0x100;
 
 static const uintptr_t GICD_IPRIORITY_BASE = 0x400;
 static const uintptr_t GICD_IROUTER = 0x6000;
 
-static MMDR_GICD* gicd = nullptr;
-
-static volatile uint32_t* distributor(uintptr_t offset = 0) {
+static volatile uint32_t* distributor(uintptr_t offset) {
   return reinterpret_cast<volatile uint32_t*>(GICD_BASE + offset);
 }
 
-static volatile uint64_t* distributor_wide(uintptr_t offset = 0) {
+static volatile uint64_t* distributor_wide(uintptr_t offset) {
   return reinterpret_cast<volatile uint64_t*>(GICD_BASE + offset);
 }
 
-// Memory Mapped Device Register for the Redistributor
-struct MMDR_GICR_RD {
-  volatile uint32_t CTRL;
-  volatile uint32_t IIDR;
-  volatile uint64_t TYPER;
-  volatile uint32_t STATUSR;
-  volatile uint32_t WAKER;
-};
-
+static uint32_t NumRedistributors = 0;
 static uintptr_t GICR_BASE = 0;
+
 static const uintptr_t GICR_STRIDE = 0x20000;
-static const uintptr_t GICR_SD_OFFSET = 0;
+static const uintptr_t GICR_RD_OFFSET = 0;
 static const uintptr_t GICR_SGI_OFFSET = 0x10000;
 
-static const uintptr_t GICR_SGI_IGROUPR0 = 0x80;
+// Memory Mapped Device Registers for Redistributors
+static const uintptr_t GICR_RD_CTRL = 0x000;
+static const uintptr_t GICR_RD_IIDR = 0x004;
+static const uintptr_t GICR_RD_TYPER = 0x008;
+static const uintptr_t GICR_RD_STATUSR = 0x010;
+static const uintptr_t GICR_RD_WAKER = 0x014;
+
+static const uintptr_t GICR_SGI_IGROUPR0 = 0x080;
 static const uintptr_t GICR_SGI_ISENABLER0 = 0x100;
 static const uintptr_t GICR_SGI_IPRIORITYR_BASE = 0x400; // + 4 * n
 
-static uint32_t NumRedistributors = 0;
-
-static MMDR_GICR_RD* redistributor_rd(int n) {
-  return reinterpret_cast<MMDR_GICR_RD*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET);
+static volatile uint32_t* redistributor_rd(int n, uintptr_t offset) {
+  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_RD_OFFSET + offset);
 }
 
-static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset = 0) {
-  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_SD_OFFSET + GICR_SGI_OFFSET + offset);
+static volatile uint64_t* redistributor_rd_wide(int n, uintptr_t offset) {
+  return reinterpret_cast<volatile uint64_t*>(GICR_BASE + n * GICR_STRIDE + GICR_RD_OFFSET + offset);
+}
+
+static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset) {
+  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_RD_OFFSET + GICR_SGI_OFFSET + offset);
 }
 
 static const uint32_t GICD_CTLR_Group0   = 0b01;
@@ -96,7 +93,6 @@ void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
         DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
         if (j == 0) {
           GICD_BASE = reinterpret_cast<uintptr_t>(rp._address);
-          gicd = reinterpret_cast<MMDR_GICD*>(rp._address);
         } else if (j == 1) {
           GICR_BASE = reinterpret_cast<uintptr_t>(rp._address);
         }
@@ -109,12 +105,12 @@ void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
 
 void GIC::v3::initialize_gic_distributor() {
   // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.
-  uint32_t ctlr = gicd->CTLR;
+  uint32_t ctlr = *distributor(GICD_CTLR);
   ctlr |= (GICD_CTLR_E1NWF | GICD_CTLR_Group1NS | GICD_CTLR_Group0);
-  gicd->CTLR = ctlr;
+  *distributor(GICD_CTLR) = ctlr;
 
   // Ensure write to GICD_CTLR has completed before continuing
-  while ((gicd->CTLR & GICD_CTLR_RWP) != 0) { }
+  while ((*distributor(GICD_CTLR) & GICD_CTLR_RWP) != 0) { }
 }
 
 static const uint32_t GICR_TYPER_Last = 0b10000;
@@ -129,23 +125,23 @@ void GIC::v3::initialize_gic_redistributors() {
 
   for (;;) {
     // Read-Modify-Write
-    uint32_t waker = redistributor_rd(current_redistributor)->WAKER;
+    uint32_t waker = *redistributor_rd(current_redistributor, GICR_RD_WAKER);
     waker &= ~GICR_WAKER_ProcessorSleep;
-    redistributor_rd(current_redistributor)->WAKER = waker;
+    *redistributor_rd(current_redistributor, GICR_RD_WAKER) = waker;
 
     // Ensure write to GICR_WAKER has completed before continuing
     asm volatile ("dsb sy" ::: "memory");
 
     // Busy-wait until the ChildrenAsleep bit becomes 0, indicating that the
     // Redistributor has awoken
-    while ((redistributor_rd(current_redistributor)->WAKER & GICR_WAKER_ChildrenAsleep) != 0) { }
+    while ((*redistributor_rd(current_redistributor, GICR_RD_WAKER) & GICR_WAKER_ChildrenAsleep) != 0) { }
 
-    if ((redistributor_rd(current_redistributor)->TYPER & GICR_TYPER_Last) != 0) {
-      // If the "last" bit is set in the TYPER mmdr, this distributor is the last one
+    if ((*redistributor_rd_wide(current_redistributor, GICR_RD_TYPER) & GICR_TYPER_Last) != 0) {
+      // If the "last" bit is set in TYPER, this distributor is the last one
       break;
     }
 
-    // Move on to next redistributor
+    // Move on to the next redistributor
     current_redistributor++;
   }
 
