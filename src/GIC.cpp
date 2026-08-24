@@ -174,36 +174,31 @@ void GIC::v3::enable_cpu_interrupts() {
 }
 
 void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
+  // From ARM: Architectural execution of a DSB instruction guarantees that: The
+  // last value written to ICC_PMR_EL1 is observed by the associated Redistributor.
   asm volatile(
    "msr ICC_PMR_EL1, %0 \n\t\
+    dsb sy              \n\t\
     isb                 \n\t\
     "
     :: "r"(priority) : "memory");
 }
 
 void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
-  const uint32_t reg_index = id / 4;
-  const uint32_t reg_offset = reg_index * 4;
-  const uint32_t byte_index = id % 4;
-  const uint32_t shift = byte_index * 8;
-
   if (id > 31) {
-    volatile uint32_t* p = distributor(GICD_IPRIORITY_BASE + reg_offset);
-    // Read-Modify-Write
-    uint32_t ipriorityn = *p;
-    ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
-    *p = ipriorityn;
-    asm volatile("dsb sy" ::: "memory");
+    // SPI, LPI
+    volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(GICD_BASE + GICD_IPRIORITY_BASE + id);
+    *p = priority;
   } else {
+    // SGI/PPI: per-CPU, in the Redistributor's SGI frame
     for (uint32_t i = 0; i < NumRedistributors; i++) {
-      // Read-Modify-Write
-      volatile uint32_t* p = redistributor_sgi(i, GICR_SGI_IPRIORITYR_BASE + reg_offset);
-      uint32_t ipriorityn = *p;
-      ipriorityn = (ipriorityn & ~(0xFF << shift)) | (priority << shift);
-      *p = ipriorityn;
+      volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(
+          GICR_BASE + i * GICR_STRIDE + GICR_RD_OFFSET + GICR_SGI_OFFSET + GICR_SGI_IPRIORITYR_BASE + id);
+      *p = priority;
     }
-    asm volatile("dsb sy" ::: "memory");
   }
+
+  asm volatile("dsb sy" ::: "memory");
 }
 
 void GIC::v3::set_interrupt_group(int id) {
