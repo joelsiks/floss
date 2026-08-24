@@ -14,8 +14,8 @@ namespace Exception {
   uint64_t get_cpuid();
 
   // These methods mask/unmask the IRQ bit in the DAIF register
-  void mask_interrupts();
-  void unmask_interrupts();
+  void mask_irqs();
+  void unmask_irqs();
 
   // Handler routines. Entered via assembly in the VBAR table
   extern "C" bool exception_handler(ExceptionFrame* frame_ptr);

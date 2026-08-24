@@ -86,14 +86,14 @@ void MMU::set_ttbr(uint64_t translation_table, uint32_t exception_level) {
      "msr   TTBR0_EL1, %0 \n\t\
       isb                 \n\t\
       "
-      : : "r"(translation_table) : "memory"
+      :: "r"(translation_table) : "memory"
     );
   } else if (exception_level == 1) {
     asm volatile(
      "msr   TTBR1_EL1, %0 \n\t\
       isb                 \n\t\
       "
-      : : "r"(translation_table) : "memory"
+      :: "r"(translation_table) : "memory"
     );
   } else {
     kpanic("Invalid exception level: %d\n", exception_level);
@@ -205,12 +205,6 @@ void MMU::setup_translation_control() {
   //  - The granule size/page size
   //  - Shareability
   //  - Whether TLB miss results in a translation fault or actual lookup
-  //
-  // EL1 & El00 translation regime (organized way of doing something)
-  // TTBR_EL1/TTBR_EL0 (Translation Table Base Register)
-
-  // TCR_EL1.IPS  (Intermediate Physical Address Size)
-  // Determines the address space size. 48 bits is common, gives 256TB addressble memory, value is 0b101
 
   // Bits [5:0]   T0SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR0_EL1
   // Bit  [7]     EPD0: This bit controls whether a translation table walk is performed
@@ -277,6 +271,7 @@ void MMU::enable() {
     orr   %0, %0, %1    \n\t\
     msr   SCTLR_EL1, %0 \n\t\
     tlbi  vmalle1       \n\t\
+    dsb   sy            \n\t\
     isb                 \n\t\
     "
     : "=&r"(temp) : "i"(SCTLR_MMU_ENABLE) : "memory"

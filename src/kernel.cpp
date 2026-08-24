@@ -8,12 +8,13 @@
 #include "memory/map.h"
 #include "memory/mmu.h"
 #include "psci.h"
+#include "timer.h"
 #include "uart.h"
 
 extern "C" void secondary_main(uint64_t cpu_id) {
   kprintf("Running core %d\n", cpu_id);
   GIC::initialize_core_specific();
-  Exception::unmask_interrupts();
+  Exception::unmask_irqs();
 }
 
 extern "C" void* _secondary_start;
@@ -33,10 +34,10 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   GIC::initialize();
 
-  //Timer::set_timer();
-  //Timer::enable();
+  Timer::set_timer();
+  Timer::enable();
 
-  Exception::unmask_interrupts();
+  Exception::unmask_irqs();
 
   UART::pl011_toggle_rx_interrupts(true);
 

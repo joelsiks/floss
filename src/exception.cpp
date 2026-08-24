@@ -24,11 +24,11 @@ uint64_t Exception::get_cpuid() {
   return mpidr;
 }
 
-void Exception::mask_interrupts() {
+void Exception::mask_irqs() {
   asm volatile("msr DAIFSet, #0b0010" ::: "memory");
 }
 
-void Exception::unmask_interrupts() {
+void Exception::unmask_irqs() {
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
 
@@ -86,6 +86,7 @@ struct ExceptionFrame {
 };
 
 static const uint32_t ESR_EL1_EC_SHIFT = 26;
+static const uint32_t ESR_EL1_EC_BITS = 0b111111;
 
 static const uint64_t EC_UDF_INS = 0;
 
@@ -102,9 +103,8 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   uint64_t exception_link = 0;
   asm ("mrs %0, ELR_EL1" : "=r" (exception_link));
 
-  // bits [31, 26] represent the "exception class", i.e., what kind of exception
-  // has occurred.
-  const uint64_t exception_class = (exception_syndrome >> ESR_EL1_EC_SHIFT) & 0b111111;
+  // The exception class holds what kind of exception has occurred
+  const uint64_t exception_class = (exception_syndrome >> ESR_EL1_EC_SHIFT) & ESR_EL1_EC_BITS;
 
   const bool bad_ec = exception_class == EC_UDF_INS ||
                       exception_class == EC_DATA_ABRT;

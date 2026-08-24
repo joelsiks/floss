@@ -78,19 +78,19 @@ vector_table:
   # 2: FIQ (Fast Interrupt Request)
   # 3: SError (CPU exception unrelated to instructions)
 
-  # EL1 keep stack
+  # ELn keep stack (SP_EL0 was used)
   vector .
   vector .
   vector .
   vector .
 
-  # ELn own stack (kernel mode)
+  # ELn own stack (kernel mode, SP_EL1 was used)
   vector exception_entry
   vector irq_entry
   vector fiq_entry
   vector exception_entry
 
-  # EL(n-1)->ELn (user mode)
+  # 64-bit EL(n-1)->ELn
   vector .
   vector .
   vector .

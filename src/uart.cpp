@@ -22,6 +22,8 @@ struct MMDR_UART {
 
 static MMDR_UART* uart = nullptr;
 
+static uint32_t gic_intid = 0;
+
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
@@ -43,6 +45,15 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
 
         current_value = (const char*)current_value + rp_size_bytes;
       }
+    } else if (strcmp(prop->_name, "interrupts")) {
+       const uint32_t type = DeviceTree::Parser::read_u32(prop->_value);
+       const uint32_t number = DeviceTree::Parser::read_u32((const uint8_t*)prop->_value + 4);
+       // flags = read_u32(... + 8);  // trigger type, ignore for now
+       if (type == 0) {
+         gic_intid = 32 + number; // SPI
+       } else if (type == 1) {
+         gic_intid = 16 + number; // PPI
+       }
     }
   }
 }
