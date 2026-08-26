@@ -48,7 +48,7 @@ static const uintptr_t GICR_STRIDE = 0x20000;
 static const uintptr_t GICR_RD_OFFSET = 0;
 static const uintptr_t GICR_SGI_OFFSET = 0x10000;
 
-// Memory Mapped Device Registers for Redistributors
+// Memory Mapped Device Registers for the Redistributors
 static const uintptr_t GICR_RD_CTRL = 0x000;
 static const uintptr_t GICR_RD_IIDR = 0x004;
 static const uintptr_t GICR_RD_TYPER = 0x008;
@@ -70,11 +70,6 @@ static volatile uint64_t* redistributor_rd_wide(int n, uintptr_t offset) {
 static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset) {
   return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_RD_OFFSET + GICR_SGI_OFFSET + offset);
 }
-
-static const uint32_t GICD_CTLR_Group0   = 0b01;
-static const uint32_t GICD_CTLR_Group1NS = 0b10;
-static const uint32_t GICD_CTLR_E1NWF = 0b10000000; // Enable 1 of N Wakeup Functionality
-static const uint32_t GICD_CTLR_RWP = 1u << 31;
 
 void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -103,10 +98,32 @@ void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   }
 }
 
+// Single security state view
+static const uint32_t GICD_CTLR_EnableGrp0 = 0b01;
+static const uint32_t GICD_CTLR_EnableGrp1 = 0b10;
+
+// Two security states non-secure view
+static const uint32_t GICD_CTLR_NS_EnableGrp1 = 0b1;
+static const uint32_t GICD_CTLR_NS_EnableGrp1A = 0b10;
+
+static const uint32_t GICD_CTLR_DS = 1 << 6;
+static const uint32_t GICD_CTLR_E1NWF = 1 << 6; // Enable 1 of N Wakeup Functionality
+static const uint32_t GICD_CTLR_RWP = 1u << 31;
+
 void GIC::v3::initialize_gic_distributor() {
-  // Read-Modify-Write so that we're not overwriting any other "feature" bits with 0.
   uint32_t ctlr = *distributor(GICD_CTLR);
-  ctlr |= (GICD_CTLR_E1NWF | GICD_CTLR_Group1NS | GICD_CTLR_Group0);
+
+  const bool ds = (ctlr & GICD_CTLR_DS) != 0;
+  if (ds) {
+    // If the DS bit is set to 1, then the system supports only a single
+    // security state.
+    ctlr |= (GICD_CTLR_E1NWF | GICD_CTLR_EnableGrp1);
+  } else {
+    // If the DS bit is set to 0, then the system supports two security states.
+    // We know floss runs in non-secure, so use those toggles.
+    ctlr |= (GICD_CTLR_E1NWF | GICD_CTLR_NS_EnableGrp1A);
+  }
+
   *distributor(GICD_CTLR) = ctlr;
 
   // Ensure write to GICD_CTLR has completed before continuing
@@ -211,7 +228,6 @@ void GIC::v3::set_interrupt_group(int id) {
     uint32_t igrouprn = *distributor(GICD_IGROUPR + reg_offset);
     igrouprn |= (1 << shift);
     *distributor(GICD_IGROUPR + reg_offset) = igrouprn;
-    asm volatile("dsb sy" ::: "memory");
   } else {
     for (uint32_t i = 0; i < NumRedistributors; i++) {
       // Read-Modify-Write
@@ -219,8 +235,9 @@ void GIC::v3::set_interrupt_group(int id) {
       igroupr0 |= 1 << id;
       *redistributor_sgi(i, GICR_SGI_IGROUPR0) = igroupr0;
     }
-    asm volatile("dsb sy" ::: "memory");
   }
+
+  asm volatile("dsb sy" ::: "memory");
 }
 
 void GIC::v3::enable_interrupt(int id) {
