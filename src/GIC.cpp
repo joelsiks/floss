@@ -46,7 +46,7 @@ static uintptr_t GICR_BASE = 0;
 
 static const uintptr_t GICR_STRIDE = 0x20000;
 static const uintptr_t GICR_RD_OFFSET = 0;
-static const uintptr_t GICR_SGI_OFFSET = 0x10000;
+static const uintptr_t GICR_SGI_OFFSET = 0x10000; // 64 KB
 
 // Memory Mapped Device Registers for the Redistributors
 static const uintptr_t GICR_RD_CTRL = 0x000;
@@ -68,7 +68,7 @@ static volatile uint64_t* redistributor_rd_wide(int n, uintptr_t offset) {
 }
 
 static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset) {
-  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_RD_OFFSET + GICR_SGI_OFFSET + offset);
+  return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_SGI_OFFSET + offset);
 }
 
 void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
