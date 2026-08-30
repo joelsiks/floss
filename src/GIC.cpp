@@ -180,13 +180,12 @@ void GIC::v3::enable_cpu_interface() {
 }
 void GIC::v3::enable_cpu_interrupts() {
   // ICC_IGRPEN1_EL1, Interrupt Controller Interrupt Group 1 Enable Register
+  const uint64_t value = 1;
   asm volatile(
-   "mrs   x0, ICC_IGRPEN1_EL1 \n\t\
-    orr   x0, x0, #1          \n\t\
-    msr   ICC_IGRPEN1_EL1, x0 \n\t\
+   "msr   ICC_IGRPEN1_EL1, %0 \n\t\
     isb                       \n\t\
     "
-    ::: "memory"
+    :: "r"(value) : "memory"
   );
 }
 
@@ -267,7 +266,7 @@ void GIC::v3::disable_interrupt(int id) {
   // TODO: Implement via the GICD_ICENABLER<n>/GICR_ICENABLER0, "write-1-to-clear"
 }
 
-static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 63; // Interrupt Routing Mode
+static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 31; // Interrupt Routing Mode
 
 void GIC::v3::set_interrupt_routing(int id, bool any) {
   if (id > 31)  {
