@@ -29,6 +29,7 @@ static const uintptr_t GICD_CTLR = 0x0000;
 static const uintptr_t GICD_TYPER = 0x0004;
 static const uintptr_t GICD_IGROUPR = 0x80;
 static const uintptr_t GICD_ISENABLER = 0x100;
+static const uintptr_t GICD_ICENABLER = 0x180;
 
 static const uintptr_t GICD_IPRIORITY_BASE = 0x400;
 static const uintptr_t GICD_IROUTER = 0x6000;
@@ -57,6 +58,7 @@ static const uintptr_t GICR_RD_WAKER = 0x014;
 
 static const uintptr_t GICR_SGI_IGROUPR0 = 0x080;
 static const uintptr_t GICR_SGI_ISENABLER0 = 0x100;
+static const uintptr_t GICR_SGI_ICENABLER0 = 0x180;
 static const uintptr_t GICR_SGI_IPRIORITYR_BASE = 0x400; // + 4 * n
 
 static volatile uint32_t* redistributor_rd(int n, uintptr_t offset) {
@@ -263,7 +265,25 @@ void GIC::v3::enable_interrupt(int id) {
 
 void GIC::v3::disable_interrupt(int id) {
   (void)id;
-  // TODO: Implement via the GICD_ICENABLER<n>/GICR_ICENABLER0, "write-1-to-clear"
+  // Both the GICD_ICENABLER<n> and GICR_ICENABLER0 are "write-1-to-clear",
+  // so no masking is required to not affect other bits. ISENABLER has the
+  // opposite effect of "write-1-to-set".
+
+  if (id > 31) {
+    const uint32_t reg_index = id / 32;
+    const uint32_t reg_offset = reg_index * 4;
+    const uint32_t shift = id % 32;
+
+    *distributor(GICD_ICENABLER + reg_offset) = (1 << shift);
+    asm volatile("dsb sy" ::: "memory");
+  } else {
+    // The Redistributor only handles interrupt ids between 0-31, which are the
+    // SGI and PPI ids
+    for (uint32_t i = 0; i < NumRedistributors; i++) {
+      *redistributor_sgi(i, GICR_SGI_ICENABLER0) = (1 << id);
+    }
+    asm volatile("dsb sy" ::: "memory");
+  }
 }
 
 static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 31; // Interrupt Routing Mode
