@@ -84,7 +84,7 @@ vector_table:
   vector .
   vector .
 
-  # ELn own stack (kernel mode, SP_EL1 was used)
+  # ELn own stack (kernel mode, SP_ELx (x>0) was used)
   vector exception_entry
   vector irq_entry
   vector fiq_entry

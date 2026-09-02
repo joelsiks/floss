@@ -172,10 +172,10 @@ void GIC::v3::initialize_gic_redistributors() {
 void GIC::v3::enable_cpu_interface() {
   // ICC_SRE_EL1, Interrupt Controller System Register Enable Register (EL1)
   asm volatile(
-   "mrs   x0, ICC_SRE_EL1 \n\t\
-    orr   x0, x0, #1      \n\t\
-    msr   ICC_SRE_EL1, x0 \n\t\
-    isb                   \n\t\
+   "mrs x0, ICC_SRE_EL1 \n\t\
+    orr x0, x0, #1      \n\t\
+    msr ICC_SRE_EL1, x0 \n\t\
+    isb                 \n\t\
     "
     ::: "memory"
   );
@@ -184,8 +184,8 @@ void GIC::v3::enable_cpu_interrupts() {
   // ICC_IGRPEN1_EL1, Interrupt Controller Interrupt Group 1 Enable Register
   const uint64_t value = 1;
   asm volatile(
-   "msr   ICC_IGRPEN1_EL1, %0 \n\t\
-    isb                       \n\t\
+   "msr ICC_IGRPEN1_EL1, %0 \n\t\
+    isb                     \n\t\
     "
     :: "r"(value) : "memory"
   );
@@ -194,12 +194,7 @@ void GIC::v3::enable_cpu_interrupts() {
 void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
   // From ARM: Architectural execution of a DSB instruction guarantees that: The
   // last value written to ICC_PMR_EL1 is observed by the associated Redistributor.
-  asm volatile(
-   "msr ICC_PMR_EL1, %0 \n\t\
-    dsb sy              \n\t\
-    isb                 \n\t\
-    "
-    :: "r"(priority) : "memory");
+  asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority) : "memory");
 }
 
 void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
@@ -211,7 +206,7 @@ void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
     // SGI/PPI: per-CPU, in the Redistributor's SGI frame
     for (uint32_t i = 0; i < NumRedistributors; i++) {
       volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(
-          GICR_BASE + i * GICR_STRIDE + GICR_RD_OFFSET + GICR_SGI_OFFSET + GICR_SGI_IPRIORITYR_BASE + id);
+          GICR_BASE + i * GICR_STRIDE + GICR_SGI_OFFSET + GICR_SGI_IPRIORITYR_BASE + id);
       *p = priority;
     }
   }
