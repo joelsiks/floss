@@ -17,8 +17,6 @@ extern "C" void secondary_main(uint64_t cpu_id) {
   Exception::unmask_irqs();
 }
 
-extern "C" void* _secondary_start;
-
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   // Start by parsing the flattened device tree so that we have MMIO addresses
   // set up before continuing the setup of the OS
@@ -43,5 +41,5 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   MMU::setup_idmap_page_tables();
 
-  PSCI::boot_core(1, (uint64_t)&_secondary_start, 1);
+  PSCI::boot_secondary_cores();
 }

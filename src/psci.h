@@ -27,7 +27,9 @@
 namespace PSCI {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
-  int32_t boot_core(uint64_t target_cpucore_id, uint64_t entry_point_address, uint64_t context_id);
+  void boot_secondary_cores();
+
+  int32_t boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint64_t context_id);
 };
 
 #endif // INCLUDE_PSCI

@@ -3,6 +3,7 @@
 
 #include <cstring>
 
+#include "cpu.h"
 #include "GIC.h"
 #include "psci.h"
 #include "uart.h"
@@ -26,6 +27,7 @@ static const DeviceTree::NodeHandler _node_handlers[] = {
   { ._match_string = "arm,pl011",  ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
   { ._match_string = "arm,gic-v3", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::v3::dt_parse     },
   { ._match_string = "memory",     ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
+  { ._match_string = "cpu",        ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
 };
 
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
@@ -313,7 +315,7 @@ static bool compatible_list_contains(const char* value, uint32_t len, const char
 static void dispatch_if_prop_match(const DeviceTree::NodeFrame* node_frame,
                                    const DeviceTree::PropFrame* compatible_prop,
                                    const DeviceTree::PropFrame* device_type_prop) {
-  // Iterate over the NodeHandler entries in node_handlers to see if this node
+  // Iterate over the NodeHandler entries in _node_handlers to see if this node
   // should be handled
   for (uint32_t i = 0; i < NumNodeHandlers; i++) {
     const DeviceTree::NodeHandler* handler = &_node_handlers[i];
