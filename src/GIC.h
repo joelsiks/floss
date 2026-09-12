@@ -6,6 +6,19 @@
 #include "DeviceTree.h"
 
 namespace GIC {
+
+  enum class InterruptPriority : uint8_t {
+    Default = 120,
+    High = 40,
+  };
+
+  enum class InterruptType {
+    Secure,
+    NonSecure,
+    Virtual,
+    Hypervisor,
+  };
+
   namespace v3 {
     void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
@@ -16,7 +29,7 @@ namespace GIC {
     void enable_cpu_interrupts();
     void set_cpu_priority_mask(uint64_t priority);
 
-    void set_interrupt_priority(int id, uint8_t priority);
+    void set_interrupt_priority(int id, InterruptPriority priority);
     void set_interrupt_group(int id);
     void enable_interrupt(int id);
     void disable_interrupt(int id);
@@ -26,6 +39,8 @@ namespace GIC {
 
   void initialize();
   void initialize_core_specific();
+
+  void initialize_interrupt(int id, InterruptPriority priority = InterruptPriority::Default);
 };
 
 #endif // INCLUDE_GIC

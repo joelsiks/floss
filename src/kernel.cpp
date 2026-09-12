@@ -32,14 +32,21 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   GIC::initialize();
 
+  // Initialize specific interrupts
+  GIC::initialize_interrupt(UART::intid(), GIC::InterruptPriority::Default);
+  GIC::initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
+
   Timer::set_timer();
   Timer::enable();
-
-  Exception::unmask_irqs();
 
   UART::pl011_toggle_rx_interrupts(true);
 
   MMU::setup_idmap_page_tables();
 
+  // Call the secondary_main for the boot core
+  secondary_main(0);
+
+  // Then spin up and boot all other cores, which will call secondary_main
+  // as well
   PSCI::boot_secondary_cores();
 }

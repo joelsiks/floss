@@ -22,7 +22,9 @@ struct MMDR_UART {
 
 static MMDR_UART* uart = nullptr;
 
-static uint32_t gic_intid = 0;
+static const uint32_t UartIntidsCapacity = 5;
+static uint32_t num_uart_intids = 0;
+static uint32_t uart_intids[UartIntidsCapacity];
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -45,17 +47,18 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
 
         current_value = (const char*)current_value + rp_size_bytes;
       }
-    } else if (strcmp(prop->_name, "interrupts")) {
-       const uint32_t type = DeviceTree::Parser::read_u32(prop->_value);
-       const uint32_t number = DeviceTree::Parser::read_u32((const uint8_t*)prop->_value + 4);
-       // flags = read_u32(... + 8);  // trigger type, ignore for now
-       if (type == 0) {
-         gic_intid = 32 + number; // SPI
-       } else if (type == 1) {
-         gic_intid = 16 + number; // PPI
-       }
+    } else if (strcmp(prop->_name, "interrupts") == 0) {
+      for (uint32_t j = 0; j < prop->num_interrupts(); j++) {
+        kprecond(num_uart_intids <= UartIntidsCapacity);
+        uart_intids[j] = DeviceTree::read_interrupt_id(prop, j);
+        num_uart_intids++;
+      }
     }
   }
+}
+
+uint32_t UART::intid() {
+  return uart_intids[0];
 }
 
 // Bits for the Interrupt Mask Set Clear register

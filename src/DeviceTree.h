@@ -27,10 +27,18 @@ namespace DeviceTree {
   const uint32_t MaxPropsPerNode = 16;
   const uint32_t MaxNodeDepth    = 8;
 
+  // TODO: Migrate this to a dynamic detection instead
+  const uint32_t InterruptCells = 3;
+
   struct PropFrame {
     const char* _name;
     const void* _value;
     uint32_t    _len;
+
+    // Only applicable for an "interrupts" prop
+    uint32_t num_interrupts() const {
+      return _len / (InterruptCells * sizeof(uint32_t));
+    }
   };
 
   // Holds the values of #address-cells and #size-cells. Default values are
@@ -86,6 +94,8 @@ namespace DeviceTree {
   };
 
   void read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp);
+
+  uint8_t read_interrupt_id(const PropFrame* prop, int index);
 
   // Chapter 5 of the Devicetree Specification v0.4
   // Raw flattened device tree (FDT) header, as laid out in memory (big-endian)

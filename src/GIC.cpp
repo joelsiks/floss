@@ -197,17 +197,17 @@ void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
   asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority) : "memory");
 }
 
-void GIC::v3::set_interrupt_priority(int id, uint8_t priority) {
+void GIC::v3::set_interrupt_priority(int id, InterruptPriority priority) {
   if (id > 31) {
     // SPI, LPI
     volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(GICD_BASE + GICD_IPRIORITY_BASE + id);
-    *p = priority;
+    *p = static_cast<uint8_t>(priority);
   } else {
     // SGI/PPI: per-CPU, in the Redistributor's SGI frame
     for (uint32_t i = 0; i < NumRedistributors; i++) {
       volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(
           GICR_BASE + i * GICR_STRIDE + GICR_SGI_OFFSET + GICR_SGI_IPRIORITYR_BASE + id);
-      *p = priority;
+      *p = static_cast<uint8_t>(priority);
     }
   }
 
@@ -319,18 +319,6 @@ void GIC::initialize() {
   GIC::v3::initialize_gic_distributor();
   GIC::v3::initialize_gic_redistributors();
 
-  // TODO: Better priority for these interrupts?
-  GIC::v3::set_interrupt_priority(30, 90);
-  GIC::v3::set_interrupt_group(30);
-  GIC::v3::enable_interrupt(30);
-
-  GIC::v3::set_interrupt_priority(33, 90);
-  GIC::v3::set_interrupt_group(33);
-  GIC::v3::enable_interrupt(33);
-
-  GIC::v3::set_interrupt_routing(33, true);
-
-  initialize_core_specific();
 }
 
 void GIC::initialize_core_specific() {
@@ -339,4 +327,13 @@ void GIC::initialize_core_specific() {
   GIC::v3::enable_cpu_interface();
   GIC::v3::set_cpu_priority_mask(0xFF);
   GIC::v3::enable_cpu_interrupts();
+}
+
+void GIC::initialize_interrupt(int id, InterruptPriority priority) {
+  GIC::v3::set_interrupt_priority(id, priority);
+  GIC::v3::set_interrupt_group(id);
+  GIC::v3::enable_interrupt(id);
+
+  // TODO: Configure routing?
+  // GIC::v3::set_interrupt_routing(33, true);
 }

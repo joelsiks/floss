@@ -9,6 +9,7 @@
 #include "uart.h"
 #include "util/assert.h"
 #include "memory/map.h"
+#include "timer.h"
 
 // Read a big-endian 32-bit integer from a byte pointer
 static uint32_t be32(const void* p) {
@@ -23,11 +24,12 @@ static uint64_t be64(const void* p) {
 }
 
 static const DeviceTree::NodeHandler _node_handlers[] = {
-  { ._match_string = "arm,psci",   ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse        },
-  { ._match_string = "arm,pl011",  ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
-  { ._match_string = "arm,gic-v3", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::v3::dt_parse     },
-  { ._match_string = "memory",     ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
-  { ._match_string = "cpu",        ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
+  { ._match_string = "arm,psci",        ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse        },
+  { ._match_string = "arm,pl011",       ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
+  { ._match_string = "arm,gic-v3",      ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::v3::dt_parse     },
+  { ._match_string = "memory",          ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
+  { ._match_string = "cpu",             ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
+  { ._match_string = "arm,armv8-timer", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = Timer::dt_parse       },
 };
 
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
@@ -58,6 +60,22 @@ void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPai
 
   out_rp->_address = address;
   out_rp->_length = length;
+}
+
+uint8_t DeviceTree::read_interrupt_id(const PropFrame* prop, int index) {
+  const uintptr_t offset = index * (InterruptCells * sizeof(uint32_t));
+  const uintptr_t interrupt_value = reinterpret_cast<uintptr_t>(prop->_value) + offset;
+
+  const uint32_t type = DeviceTree::Parser::read_u32(reinterpret_cast<void *>(interrupt_value));
+  const uint32_t number = DeviceTree::Parser::read_u32(reinterpret_cast<void *>(interrupt_value + sizeof(uint32_t)));
+
+  // flags = read_u32(... + 8);  // trigger type, ignore for now
+
+  const uint8_t intid = type == 0
+      ? 32 + number // SPI
+      : 16 + number; // PPI
+
+  return intid;
 }
 
 DeviceTree::Status DeviceTree::Parser::init(const FlattenedDeviceTree* fdt) {
