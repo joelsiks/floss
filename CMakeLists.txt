@@ -55,13 +55,6 @@ set_target_properties(floss_kernel PROPERTIES LINK_DEPENDS
 target_include_directories(floss_kernel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# --- QEMU run target ---------------------------------------------------------
-# `cmake --build build --target run` boots the built kernel under QEMU via the
-# script below. This target configures fine even before floss_kernel exists; it
-# only fails at run time if the ELF hasn't been built yet.
-#
-# Once you've uncommented the kernel target above, also uncomment the
-# add_dependencies line so `run` always triggers a rebuild first.
 add_custom_target(run
     COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu.sh
             ${CMAKE_BINARY_DIR}/floss_kernel
@@ -71,9 +64,8 @@ add_custom_target(run
 )
 add_dependencies(run floss_kernel)
 
-# `cmake --build build --target run-debug` boots the kernel paused (-S) and,
-# when run inside tmux, opens a gdb pane that attaches to QEMU's gdbserver on
-# :1234. FLOSS_GDB=1 (set below) enables the pane; otherwise it prints a hint.
+# Boots the kernel paused (-S) and, when run inside tmux, opens a gdb pane that
+# attaches to QEMU's gdbserver on :1234. FLOSS_GDB=1 (set below) enables the pane.
 add_custom_target(run-debug
     COMMAND ${CMAKE_COMMAND} -E env FLOSS_GDB=1
             ${CMAKE_SOURCE_DIR}/scripts/run-qemu.sh
