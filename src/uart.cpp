@@ -6,6 +6,7 @@
 #include "DeviceTree.h"
 #include "util/assert.h"
 
+
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
   volatile uint32_t DR;   // 0x00, Data Register,
@@ -22,9 +23,7 @@ struct MMDR_UART {
 
 static MMDR_UART* uart = nullptr;
 
-static const uint32_t UartIntidsCapacity = 5;
-static uint32_t num_uart_intids = 0;
-static uint32_t uart_intids[UartIntidsCapacity];
+static DeviceTree::Interrupts _uart_interrupts;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -48,17 +47,21 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
         current_value = (const char*)current_value + rp_size_bytes;
       }
     } else if (strcmp(prop->_name, "interrupts") == 0) {
-      for (uint32_t j = 0; j < prop->num_interrupts(); j++) {
-        kprecond(num_uart_intids <= UartIntidsCapacity);
-        uart_intids[j] = DeviceTree::read_interrupt_id(prop, j);
-        num_uart_intids++;
+      _uart_interrupts.reset();
+
+      const uint32_t interrupt_cells = node_frame->_own_cells.lookup_interrupt_cells();
+      const uint32_t num_interrupts = prop->_len / (interrupt_cells * sizeof(uint32_t));
+      kprecond(num_interrupts <= _uart_interrupts.Capacity);
+
+      for (uint32_t j = 0; j < num_interrupts; j++) {
+        _uart_interrupts.register_intid(DeviceTree::read_interrupt_id(prop, j, interrupt_cells));
       }
     }
   }
 }
 
 uint32_t UART::intid() {
-  return uart_intids[0];
+  return _uart_interrupts.get(0);
 }
 
 // Bits for the Interrupt Mask Set Clear register

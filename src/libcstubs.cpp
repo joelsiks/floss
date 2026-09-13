@@ -1,13 +1,24 @@
 
 #include "libcstubs.h"
 
-#include "util/assert.h"
+#include <cstdint>
 
 void memset(void* ptr, int c, size_t n) {
   char* const memory = reinterpret_cast<char*>(ptr);
   for (size_t i = 0; i < n; i++) {
     memory[i] = (char)c;
   }
+}
+
+void* memcpy(void* dest, const void* src, size_t n) {
+  char* const dest_c = reinterpret_cast<char*>(dest);
+  const char* const src_c = reinterpret_cast<const char*>(src);
+
+  for (size_t i = 0; i < n; i++) {
+    dest_c[i] = src_c[i];
+  }
+
+  return dest;
 }
 
 int strcmp(const char *s1, const char *s2) {

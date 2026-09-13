@@ -22,36 +22,50 @@
 // so guest code must look in the DTB.
 
 namespace DeviceTree {
+
+  class Interrupts {
+  public:
+    // More than four intids are ever (rarely?) needed
+    static const uint32_t Capacity = 4;
+
+  private:
+    uint32_t _num_intids = 0;
+    uint32_t _intids[Capacity];
+
+  public:
+    void register_intid(uint32_t intid);
+    uint32_t get(uint32_t index) const;
+
+    void reset();
+  };
+
   // Gives a total static allocation size of:
   // MaxNodeDepth * sizeof(PropFrame) * MaxPropsPerNode
   const uint32_t MaxPropsPerNode = 16;
   const uint32_t MaxNodeDepth    = 8;
 
-  // TODO: Migrate this to a dynamic detection instead
-  const uint32_t InterruptCells = 3;
-
   struct PropFrame {
     const char* _name;
     const void* _value;
     uint32_t    _len;
-
-    // Only applicable for an "interrupts" prop
-    uint32_t num_interrupts() const {
-      return _len / (InterruptCells * sizeof(uint32_t));
-    }
   };
 
-  // Holds the values of #address-cells and #size-cells. Default values are
-  // defined in the spec, see chapter 2.3.5.
+  // Holds the values that should transitively propogate with Nodes.
+  // See chapter 2.3.5 for some details on this.
   struct NodeCells {
-    // Each unit is worth four bytes (a uint32_t)
-    static const uint32_t BytesPerUnit = 4;
+    // Each unit is worth four bytes / size of uint32_t
+    static const uint32_t BytesPerUnit = sizeof(uint32_t);
 
     uint32_t _address{2};
     uint32_t _size{1};
 
+    // A phandle value to a NodeMapping
+    uint32_t _interrupt_parent{0};
+
     inline uint32_t total() const { return _address + _size; }
     inline uint32_t byte_size() const { return total() * BytesPerUnit; }
+
+    uint32_t lookup_interrupt_cells() const;
   };
 
   struct NodeFrame {
@@ -75,13 +89,21 @@ namespace DeviceTree {
     inline NodeFrame* current() { return &_node_frame[_top]; }
   };
 
+  struct NodeMapping {
+    uint32_t  _phandle{0};
+
+    // We might want to add more information here in the future. Instances
+    // will only track some of the fields below.
+    uint32_t _interrupt_cells{0};
+  };
+
   enum class MatchKind {
     Compatible,
     DeviceType,
   };
 
   struct NodeHandler {
-    const char* _match_string;
+    const char*     _match_string;
     const MatchKind _match_kind;
     void (*_on_node)(const DeviceTree::NodeFrame*);
   };
@@ -94,8 +116,7 @@ namespace DeviceTree {
   };
 
   void read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp);
-
-  uint8_t read_interrupt_id(const PropFrame* prop, int index);
+  uint32_t read_interrupt_id(const PropFrame* prop, uint32_t index, uint32_t interrupt_cells);
 
   // Chapter 5 of the Devicetree Specification v0.4
   // Raw flattened device tree (FDT) header, as laid out in memory (big-endian)
@@ -204,7 +225,7 @@ namespace DeviceTree {
     static uint64_t read_prop(const PropFrame* prop);
   };
 
-  Status parse_frames(FlattenedDeviceTree* fdt);
+  Status parse_frames(const FlattenedDeviceTree* fdt);
 
 } // namespace DeviceTree
 

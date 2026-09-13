@@ -21,4 +21,6 @@ void report_error(const char* file, int line, const char* error_msg, const char*
 #define kpanic(...) \
   report_error(__FILE__, __LINE__, "Kernel panic: ", __VA_ARGS__)
 
+#define ShouldNotReachHere() kpanic("ShouldNotReachHere")
+
 #endif //INCLUDE_UTIL_ASSERT

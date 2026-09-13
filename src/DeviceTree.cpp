@@ -34,6 +34,21 @@ static const DeviceTree::NodeHandler _node_handlers[] = {
 
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);
 
+void DeviceTree::Interrupts::register_intid(uint32_t intid) {
+  kprecond(_num_intids < Capacity);
+  _intids[_num_intids] = intid;
+  _num_intids++;
+}
+
+uint32_t DeviceTree::Interrupts::get(uint32_t index) const {
+  kprecond(index < _num_intids);
+  return _intids[index];
+}
+
+void DeviceTree::Interrupts::reset() {
+  _num_intids = 0;
+}
+
 void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp) {
   const void* address_value = value;
 
@@ -62,8 +77,8 @@ void DeviceTree::read_reg_pair(const NodeCells* cells, const void* value, RegPai
   out_rp->_length = length;
 }
 
-uint8_t DeviceTree::read_interrupt_id(const PropFrame* prop, int index) {
-  const uintptr_t offset = index * (InterruptCells * sizeof(uint32_t));
+uint32_t DeviceTree::read_interrupt_id(const PropFrame* prop, uint32_t index, uint32_t interrupt_cells) {
+  const uintptr_t offset = index * (interrupt_cells * sizeof(uint32_t));
   const uintptr_t interrupt_value = reinterpret_cast<uintptr_t>(prop->_value) + offset;
 
   const uint32_t type = DeviceTree::Parser::read_u32(reinterpret_cast<void *>(interrupt_value));
@@ -71,7 +86,7 @@ uint8_t DeviceTree::read_interrupt_id(const PropFrame* prop, int index) {
 
   // flags = read_u32(... + 8);  // trigger type, ignore for now
 
-  const uint8_t intid = type == 0
+  const uint32_t intid = type == 0
       ? 32 + number // SPI
       : 16 + number; // PPI
 
@@ -360,26 +375,48 @@ static void dispatch_if_prop_match(const DeviceTree::NodeFrame* node_frame,
   }
 }
 
-DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt) {
-  Parser dtp;
+static const uint32_t PhandleNodeMappingCapacity = 8;
+static uint32_t _num_phandle_to_node_mappings = 0;
+static DeviceTree::NodeMapping _phandle_node_mapping[PhandleNodeMappingCapacity];
 
-  Status init_status = dtp.init(fdt);
-  if (init_status != Status::Ok) {
+uint32_t DeviceTree::NodeCells::lookup_interrupt_cells() const {
+  kprecond(_interrupt_parent != 0);
+
+  for (uint32_t i = 0; i < _num_phandle_to_node_mappings; i++) {
+    if (_phandle_node_mapping[i]._phandle == _interrupt_parent) {
+      const uint32_t interrupt_cells = _phandle_node_mapping[i]._interrupt_cells;
+      kprecond(interrupt_cells != 0);
+      return interrupt_cells;
+    }
+  }
+
+  kpanic("phandle %x cannot be found", _interrupt_parent);
+  return 0;
+}
+
+static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDeviceTree* fdt) {
+  DeviceTree::Parser dtp;
+
+  DeviceTree::Status init_status = dtp.init(fdt);
+  if (init_status != DeviceTree::Status::Ok) {
     return init_status;
   }
 
-  ParsingFrame parsing_frame;
+  // Reset the phandle to node mappings
+  _num_phandle_to_node_mappings = 0;
+
+  DeviceTree::ParsingFrame parsing_frame;
   parsing_frame._top = 0;
 
-  while (dtp.next() != Token::End) {
+  while (dtp.next() != DeviceTree::Token::End) {
     switch (dtp.current()) {
-      case Token::BeginNode: {
+      case DeviceTree::Token::BeginNode: {
         if (strcmp(dtp.node_name(), "") != 0) {
           // This is not the root node
-          const NodeCells parent_cells = parsing_frame.current()->_own_cells;
+          const DeviceTree::NodeCells parent_cells = parsing_frame.current()->_own_cells;
 
           parsing_frame._top++;
-          kpostcond(parsing_frame._top < MaxNodeDepth);
+          kpostcond(parsing_frame._top < DeviceTree::MaxNodeDepth);
 
           parsing_frame.current()->_parent_cells = parent_cells;
         }
@@ -388,9 +425,85 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
         parsing_frame.current()->_nprops = 0;
         break;
       }
-      case Token::EndNode: {
-        const PropFrame* compatible_prop = parsing_frame.current()->compatible_prop();
-        const PropFrame* device_type_prop = parsing_frame.current()->device_type_prop();
+      case DeviceTree::Token::EndNode: {
+        DeviceTree::NodeMapping mapping;
+
+        // Find the prop values for the NodeMapping
+        for (uint32_t i = 0; i < parsing_frame.current()->_nprops; i++) {
+          const DeviceTree::PropFrame* prop = &parsing_frame.current()->_props[i];
+
+          if (strcmp(prop->_name, "phandle") == 0) {
+            mapping._phandle = DeviceTree::Parser::read_u32(prop->_value);
+          } else if (strcmp(prop->_name, "#interrupt-cells") == 0) {
+            mapping._interrupt_cells = DeviceTree::Parser::read_u32(prop->_value);
+          }
+        }
+
+        if (mapping._phandle != 0) {
+          _phandle_node_mapping[_num_phandle_to_node_mappings] = mapping;
+          _num_phandle_to_node_mappings++;
+        }
+
+        // Move down in the parsing frame stack. The _top value is 0 if the node
+        // end is for the root node.
+        if (parsing_frame._top > 0) {
+          parsing_frame._top--;
+        }
+      }
+      break;
+      case DeviceTree::Token::Prop:
+        // Store the prop data in the current slot
+        parsing_frame.current()->current_prop()->_name = dtp.prop_name();
+        parsing_frame.current()->current_prop()->_value = dtp.prop_value();
+        parsing_frame.current()->current_prop()->_len = dtp.prop_len();
+
+        parsing_frame.current()->_nprops++;
+        kpostcond(parsing_frame.current()->_nprops < DeviceTree::MaxPropsPerNode);
+        break;
+      case DeviceTree::Token::End:
+        break;
+      case DeviceTree::Token::Nop:
+        continue;
+    }
+  }
+
+  return DeviceTree::Status::Ok;
+}
+
+static DeviceTree::Status parse_frames_full(const DeviceTree::FlattenedDeviceTree* fdt) {
+  DeviceTree::Parser dtp;
+
+  DeviceTree::Status init_status = dtp.init(fdt);
+  if (init_status != DeviceTree::Status::Ok) {
+    return init_status;
+  }
+
+  DeviceTree::ParsingFrame parsing_frame;
+  parsing_frame._top = 0;
+
+  while (dtp.next() != DeviceTree::Token::End) {
+    switch (dtp.current()) {
+      case DeviceTree::Token::BeginNode: {
+        if (strcmp(dtp.node_name(), "") != 0) {
+          // This is not the root node
+          const DeviceTree::NodeCells parent_cells = parsing_frame.current()->_own_cells;
+
+          parsing_frame._top++;
+          kpostcond(parsing_frame._top < DeviceTree::MaxNodeDepth);
+
+          parsing_frame.current()->_parent_cells = parent_cells;
+
+          // Inherit interrupt parent
+          parsing_frame.current()->_own_cells._interrupt_parent = parent_cells._interrupt_parent;
+        }
+
+        parsing_frame.current()->_name = dtp.node_name();
+        parsing_frame.current()->_nprops = 0;
+        break;
+      }
+      case DeviceTree::Token::EndNode: {
+        const DeviceTree::PropFrame* compatible_prop = parsing_frame.current()->compatible_prop();
+        const DeviceTree::PropFrame* device_type_prop = parsing_frame.current()->device_type_prop();
 
         dispatch_if_prop_match(parsing_frame.current(), compatible_prop, device_type_prop);
 
@@ -401,11 +514,13 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
         }
       }
       break;
-      case Token::Prop:
+      case DeviceTree::Token::Prop:
         if (strcmp(dtp.prop_name(), "#address-cells") == 0) {
-          parsing_frame.current()->_own_cells._address = Parser::read_u32(dtp.prop_value());
+          parsing_frame.current()->_own_cells._address = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else if (strcmp(dtp.prop_name(), "#size-cells") == 0) {
-          parsing_frame.current()->_own_cells._size = Parser::read_u32(dtp.prop_value());
+          parsing_frame.current()->_own_cells._size = DeviceTree::Parser::read_u32(dtp.prop_value());
+        } else if (strcmp(dtp.prop_name(), "interrupt-parent") == 0) {
+          parsing_frame.current()->_own_cells._interrupt_parent = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else {
           // Store the prop data in the current slot
           parsing_frame.current()->current_prop()->_name = dtp.prop_name();
@@ -421,15 +536,27 @@ DeviceTree::Status DeviceTree::parse_frames(DeviceTree::FlattenedDeviceTree* fdt
           }
 
           parsing_frame.current()->_nprops++;
-          kpostcond(parsing_frame.current()->_nprops < MaxPropsPerNode);
+          kpostcond(parsing_frame.current()->_nprops < DeviceTree::MaxPropsPerNode);
         }
         break;
-      case Token::End:
+      case DeviceTree::Token::End:
         break;
-      case Token::Nop:
+      case DeviceTree::Token::Nop:
         continue;
     }
   }
 
-  return Status::Ok;
+  return DeviceTree::Status::Ok;
+}
+
+DeviceTree::Status DeviceTree::parse_frames(const DeviceTree::FlattenedDeviceTree* fdt) {
+  // The first pass gathers information that needs to be available for the second
+  // pass to be able to stream parsing.
+  Status status = parse_frames_phandle(fdt);
+  if (status != Status::Ok) {
+    return status;
+  }
+
+  // The second pass does the actual work of gathering the bulk of information
+  return parse_frames_full(fdt);
 }

@@ -5,6 +5,8 @@
 
 extern "C" void memset(void* ptr, int c, size_t n);
 
+extern "C" void* memcpy(void* dest, const void* src, size_t n);
+
 extern "C" int strcmp(const char *s1, const char *s2);
 extern "C" int strncmp(const char *s1, const char *s2, size_t n);
 
