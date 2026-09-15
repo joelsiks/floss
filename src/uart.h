@@ -1,7 +1,7 @@
 #ifndef INCLUDE_UART
 #define INCLUDE_UART
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "DeviceTree.h"
 

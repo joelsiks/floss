@@ -19,7 +19,7 @@ namespace Exception {
 
   // Handler routines. Entered via assembly in the VBAR table
   extern "C" bool exception_handler(ExceptionFrame* frame_ptr);
-  extern "C" uint32_t irq_handler(ExceptionFrame* frame_ptr, uint32_t intid);
+  extern "C" uint32_t irq_handler(uint32_t intid, ExceptionFrame* frame_ptr);
 };
 
 #endif // INCLUDE_EXCEPTION

@@ -4,7 +4,7 @@
 #include <cstring>
 
 #include "cpu.h"
-#include "GIC.h"
+#include "interrupts/gic.h"
 #include "psci.h"
 #include "uart.h"
 #include "util/assert.h"
@@ -24,12 +24,16 @@ static uint64_t be64(const void* p) {
 }
 
 static const DeviceTree::NodeHandler _node_handlers[] = {
-  { ._match_string = "arm,psci",        ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse        },
-  { ._match_string = "arm,pl011",       ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
-  { ._match_string = "arm,gic-v3",      ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::v3::dt_parse     },
-  { ._match_string = "memory",          ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
-  { ._match_string = "cpu",             ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
-  { ._match_string = "arm,armv8-timer", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = Timer::dt_parse       },
+  { ._match_string = "arm,psci",           ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse        },
+  { ._match_string = "arm,pl011",          ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
+  { ._match_string = "memory",             ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
+  { ._match_string = "cpu",                ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
+  { ._match_string = "arm,armv8-timer",    ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = Timer::dt_parse       },
+
+  // Interrupt Controller
+  { ._match_string = "arm,gic-400",        ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2      },
+  { ._match_string = "arm,cortex-a15-gic", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2      },
+  { ._match_string = "arm,gic-v3",         ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v3      },
 };
 
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);

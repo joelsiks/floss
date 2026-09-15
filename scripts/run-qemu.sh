@@ -13,6 +13,8 @@ set -euo pipefail
 KERNEL="${1:-build/floss_kernel}"
 shift || true   # drop the kernel arg so "$@" holds extra QEMU flags
 
+GIC_VERSION="${FLOSS_GIC_VERSION:-3}"
+
 if [[ ! -f "$KERNEL" ]]; then
     echo "error: kernel image not found: $KERNEL" >&2
     echo "hint: build first with  cmake --build build" >&2
@@ -50,9 +52,10 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 # file:
 #   QEMU Option(s): -M dumpdtb=dump.dtb
 #   Command line dtb -> dts: dtc -I dtb -O dts -o device-tree-plain-text.dts dump.dtb
+#   -cpu cortex-a53 \
 exec qemu-system-aarch64 \
-    -M virt,gic-version=3 \
-    -cpu cortex-a53 \
+    -M virt,gic-version=$FLOSS_GIC_VERSION \
+    -cpu cortex-a76 \
     -m 2G \
     -nographic \
     -no-reboot \

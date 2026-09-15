@@ -3,7 +3,7 @@
 
 #include "DeviceTree.h"
 #include "exception.h"
-#include "GIC.h"
+#include "interrupts/gic.h"
 #include "kstdio.h"
 #include "memory/map.h"
 #include "memory/mmu.h"
@@ -13,7 +13,7 @@
 
 extern "C" void secondary_main(uint64_t cpu_id) {
   kprintf("Running core %d\n", cpu_id);
-  GIC::initialize_core_specific();
+  GIC::driver()->initialize_core_specific();
   Exception::unmask_irqs();
 }
 
@@ -30,11 +30,11 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   const uint64_t el = Exception::get_exception_level();
   kprintf("Kernel running at exception level: %d\n", el);
 
-  GIC::initialize();
+  GIC::driver()->initialize();
 
   // Initialize specific interrupts
-  GIC::initialize_interrupt(UART::intid(), GIC::InterruptPriority::Default);
-  GIC::initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
+  GIC::driver()->initialize_interrupt(UART::intid(), GIC::InterruptPriority::Default);
+  GIC::driver()->initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
 
   Timer::set_timer();
   Timer::enable();

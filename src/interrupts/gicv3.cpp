@@ -1,11 +1,9 @@
 
-#include "GIC.h"
+#include "interrupts/gicv3.h"
 
 #include <cstring>
 
-#include "DeviceTree.h"
 #include "kstdio.h"
-#include "util/assert.h"
 
 // The Distributor, Redistributor, and Interrupt Translation Service (ITS) are
 // collectively known as an Interrupt Routing Infrastructure (IRI). There is one
@@ -73,33 +71,6 @@ static volatile uint32_t* redistributor_sgi(int n, uintptr_t offset) {
   return reinterpret_cast<volatile uint32_t*>(GICR_BASE + n * GICR_STRIDE + GICR_SGI_OFFSET + offset);
 }
 
-void GIC::v3::dt_parse(const DeviceTree::NodeFrame* node_frame) {
-  // Iterate over all the props
-  for (uint32_t i = 0; i < node_frame->_nprops; i++) {
-    const DeviceTree::PropFrame* prop = &node_frame->_props[i];
-
-    if (strcmp(prop->_name, "reg") == 0) {
-      const void* current_value = prop->_value;
-      const uint32_t rp_size_bytes = node_frame->_parent_cells.byte_size();
-      const uint32_t num_reg_pairs = prop->_len / rp_size_bytes;
-
-      kassert(prop->_len % rp_size_bytes == 0, "Invalid reg length (%d, rp size %d)\n", prop->_len, rp_size_bytes);
-
-      DeviceTree::RegPair rp;
-      for (uint32_t j = 0; j < num_reg_pairs; j++) {
-        DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
-        if (j == 0) {
-          GICD_BASE = reinterpret_cast<uintptr_t>(rp._address);
-        } else if (j == 1) {
-          GICR_BASE = reinterpret_cast<uintptr_t>(rp._address);
-        }
-
-        current_value = (const char*)current_value + rp_size_bytes;
-      }
-    }
-  }
-}
-
 // Single security state view
 static const uint32_t GICD_CTLR_EnableGrp0 = 0b01;
 static const uint32_t GICD_CTLR_EnableGrp1 = 0b10;
@@ -112,7 +83,7 @@ static const uint32_t GICD_CTLR_DS = 1 << 6;
 static const uint32_t GICD_CTLR_E1NWF = 1 << 6; // Enable 1 of N Wakeup Functionality
 static const uint32_t GICD_CTLR_RWP = 1u << 31;
 
-void GIC::v3::initialize_gic_distributor() {
+void GIC::DriverV3::initialize_gic_distributor() {
   uint32_t ctlr = *distributor(GICD_CTLR);
 
   const bool ds = (ctlr & GICD_CTLR_DS) != 0;
@@ -136,7 +107,7 @@ static const uint32_t GICR_TYPER_Last = 0b10000;
 static const uint32_t GICR_WAKER_ProcessorSleep = 0b010;
 static const uint32_t GICR_WAKER_ChildrenAsleep = 0b100;
 
-void GIC::v3::initialize_gic_redistributors() {
+void GIC::DriverV3::initialize_gic_redistributors() {
   // Enable each core's Redistributor. By default, the Redistributor is in a
   // low-power state to conserve energy. The Redistributor is awoken by clearing
   // the ProcessorSleep bit in the GICR_WAKER register.
@@ -166,10 +137,10 @@ void GIC::v3::initialize_gic_redistributors() {
 
   NumRedistributors = current_redistributor + 1;
 
-  kprintf("Num redistributors: %d\n", NumRedistributors);
+  kprintf("GICv3: Num redistributors: %d\n", NumRedistributors);
 }
 
-void GIC::v3::enable_cpu_interface() {
+void GIC::DriverV3::enable_cpu_interface() {
   // ICC_SRE_EL1, Interrupt Controller System Register Enable Register (EL1)
   asm volatile(
    "mrs x0, ICC_SRE_EL1 \n\t\
@@ -180,7 +151,7 @@ void GIC::v3::enable_cpu_interface() {
     ::: "memory"
   );
 }
-void GIC::v3::enable_cpu_interrupts() {
+void GIC::DriverV3::enable_cpu_interrupts() {
   // ICC_IGRPEN1_EL1, Interrupt Controller Interrupt Group 1 Enable Register
   const uint64_t value = 1;
   asm volatile(
@@ -191,13 +162,13 @@ void GIC::v3::enable_cpu_interrupts() {
   );
 }
 
-void GIC::v3::set_cpu_priority_mask(uint64_t priority) {
+void GIC::DriverV3::set_cpu_priority_mask(uint64_t priority) {
   // From ARM: Architectural execution of a DSB instruction guarantees that: The
   // last value written to ICC_PMR_EL1 is observed by the associated Redistributor.
   asm volatile("msr ICC_PMR_EL1, %0" :: "r"(priority) : "memory");
 }
 
-void GIC::v3::set_interrupt_priority(int id, InterruptPriority priority) {
+void GIC::DriverV3::set_interrupt_priority(int id, InterruptPriority priority) {
   if (id > 31) {
     // SPI, LPI
     volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(GICD_BASE + GICD_IPRIORITY_BASE + id);
@@ -214,7 +185,7 @@ void GIC::v3::set_interrupt_priority(int id, InterruptPriority priority) {
   asm volatile("dsb sy" ::: "memory");
 }
 
-void GIC::v3::set_interrupt_group(int id) {
+void GIC::DriverV3::set_interrupt_group(int id) {
   if (id > 31) {
     const uint32_t reg_index = id / 32;
     const uint32_t reg_offset = reg_index * 4;
@@ -236,7 +207,7 @@ void GIC::v3::set_interrupt_group(int id) {
   asm volatile("dsb sy" ::: "memory");
 }
 
-void GIC::v3::enable_interrupt(int id) {
+void GIC::DriverV3::enable_interrupt(int id) {
   // Both the GICD_ISENABLER<n> and GICR_ISENABLER0 are "write-1-to-set",
   // so no masking is required to not affect other bits. ICENABLER has the
   // opposite effect of "write-1-to-clear".
@@ -258,7 +229,7 @@ void GIC::v3::enable_interrupt(int id) {
   }
 }
 
-void GIC::v3::disable_interrupt(int id) {
+void GIC::DriverV3::disable_interrupt(int id) {
   (void)id;
   // Both the GICD_ICENABLER<n> and GICR_ICENABLER0 are "write-1-to-clear",
   // so no masking is required to not affect other bits. ISENABLER has the
@@ -283,7 +254,7 @@ void GIC::v3::disable_interrupt(int id) {
 
 static const uint64_t GICD_IROUTER_IRM = (uint64_t)1 << 31; // Interrupt Routing Mode
 
-void GIC::v3::set_interrupt_routing(int id, bool any) {
+void GIC::DriverV3::set_interrupt_routing(int id, bool any) {
   if (id > 31)  {
     const uint64_t offset = 8 * id;
 
@@ -308,6 +279,14 @@ void GIC::v3::set_interrupt_routing(int id, bool any) {
   }
 }
 
+void GIC::DriverV3::set_gicd_base(uintptr_t base) {
+  GICD_BASE = base;
+}
+
+void GIC::DriverV3::set_gicr_base(uintptr_t base) {
+  GICR_BASE = base;
+}
+
 // Initialization sequence:
 //   GICD (Distributor)
 //   GICR (Redistributor)
@@ -315,25 +294,39 @@ void GIC::v3::set_interrupt_routing(int id, bool any) {
 //   CPU enable (ICC_SRE_EL1, priority mask ICC_PMR_EL1, ICC_IGRPEN1_EL1)
 //      Must be done by each PE themself
 
-void GIC::initialize() {
-  GIC::v3::initialize_gic_distributor();
-  GIC::v3::initialize_gic_redistributors();
-
+void GIC::DriverV3::initialize() {
+  initialize_gic_distributor();
+  initialize_gic_redistributors();
 }
 
-void GIC::initialize_core_specific() {
+void GIC::DriverV3::initialize_core_specific() {
   // Finish by enabling interrupts in the CPU interface. This is done PER-CORE
   // and can not be done solely by the "startup core"
-  GIC::v3::enable_cpu_interface();
-  GIC::v3::set_cpu_priority_mask(0xFF);
-  GIC::v3::enable_cpu_interrupts();
+  enable_cpu_interface();
+  set_cpu_priority_mask(0xFF);
+  enable_cpu_interrupts();
 }
 
-void GIC::initialize_interrupt(int id, InterruptPriority priority) {
-  GIC::v3::set_interrupt_priority(id, priority);
-  GIC::v3::set_interrupt_group(id);
-  GIC::v3::enable_interrupt(id);
+void GIC::DriverV3::initialize_interrupt(int id, InterruptPriority priority) {
+  set_interrupt_priority(id, priority);
+  set_interrupt_group(id);
+  enable_interrupt(id);
 
   // TODO: Configure routing?
-  // GIC::v3::set_interrupt_routing(33, true);
+  // GIC::GICv3Driver::set_interrupt_routing(33, true);
+}
+
+uint32_t GIC::DriverV3::acknowledge_interrupt() {
+  uint64_t intid;
+
+  // Interrupt Acknowledge Register (IAR)
+  asm volatile("mrs %0, ICC_IAR1_EL1" : "=r"(intid) :: "memory");
+
+  // Narrowing conversion is fine here since the INTID is in the bottom [23:0] bits
+  return static_cast<uint32_t>(intid);
+}
+
+void GIC::DriverV3::end_of_interrupt(uint32_t id) {
+  // End of Interrupt Register (EOIR)
+  asm volatile("msr ICC_EOIR1_EL1, %0" :: "r"(static_cast<uint64_t>(id)) : "memory");
 }

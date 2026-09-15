@@ -2,7 +2,7 @@
 #define INCLUDE_TIMER
 
 #include "DeviceTree.h"
-#include "GIC.h"
+#include "interrupts/gic.h"
 
 namespace Timer {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);

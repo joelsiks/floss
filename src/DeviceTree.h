@@ -5,7 +5,7 @@
 
 // From QEMU virt documentation https://www.qemu.org/docs/master/system/arm/virt.html
 //
-// The virt board automatically generates a device tree blob (“dtb”) which it
+// The virt board automatically generates a device tree blob ("dtb") which it
 // passes to the guest. This provides information about the addresses, interrupt
 // lines and other configuration of the various devices in the system. Guest code
 // can rely on and hard-code the following addresses:

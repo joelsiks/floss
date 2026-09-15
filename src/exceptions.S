@@ -46,22 +46,23 @@ exception_entry:
 
 irq_entry:
   save_registers
-  mov   x0, sp
+  mov   x1, sp
 
-  # IAR is the Interrupt Acknowledge Register
-  mrs   x1, ICC_IAR1_EL1
+  bl    acknowledge_interrupt
   bl    irq_handler
-  msr   ICC_EOIR1_EL1, x0
+  bl    end_of_interrupt
 
   restore_registers
   eret
 
 fiq_entry:
   save_registers
-  mov   x0, sp
-  mrs   x1, ICC_IAR0_EL1
+  mov   x1, sp
+
+  bl    acknowledge_interrupt
   bl    irq_handler
-  msr   ICC_EOIR0_EL1, x0
+  bl    end_of_interrupt
+
   restore_registers
   eret
 

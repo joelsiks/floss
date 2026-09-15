@@ -1,8 +1,10 @@
 
 #include "exception.h"
+#include "interrupts/gic.h"
 #include "kstdio.h"
 #include "timer.h"
 #include "uart.h"
+#include "util/assert.h"
 
 uint64_t Exception::get_exception_level() {
   uint64_t el;
@@ -119,9 +121,11 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 
 static UART::ReceiveBuffer uart_rx_irq_buffer;
 
-extern "C" uint32_t Exception::irq_handler(ExceptionFrame* frame_ptr, uint32_t intid) {
+extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
   kprintf("IRQ INTID %d handled by %d\n", intid, get_cpuid());
+
+  kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
 
   if (intid == 30) {
     kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
