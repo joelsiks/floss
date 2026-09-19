@@ -72,6 +72,14 @@ It might be useful to set scheduler locking to step mode so that multiple thread
 (gdb) set scheduler-locking step
 ```
 
+# Running on a Raspberry Pi 5
+
+A goal is to boot and run floss on a Raspberry Pi 5 with 1GB of memory.
+
+1. The base for the kernel should be at `0x80000`. Make sure the aarch64.ld linker script matches this. (`BASE = 0x80000;`).
+2. The Raspberry Pi 5 (and earlier models) seem to be using GICv2, so it must be working correctly. The main difference beteween GICv3 and GICv2 is that v2 does not have Redistributors, and the CPU interface is accessed via MMIO/MMDR instead of system registers.
+3. The kernel image should be named `kernel_2712.img` (matching the Broadcom 2712 chip). The firmware expects `arm_64bit=1` to be set to find this kernel image.
+
 ## Useful Documentation
 
 * [DeviceTree v0.4 Specification](https://github.com/devicetree-org/devicetree-specification/releases/tag/v0.4)

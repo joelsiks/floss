@@ -38,8 +38,8 @@ fi
 aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 
 # -M virt            : the generic "virt" board; load address 0x40000000 (see linker/aarch64.ld)
-# -cpu cortex-a53    : a common ARMv8-A core (matches the linker/load assumptions)
-# -m 128M            : 128 MiB of RAM — plenty for early bring-up
+# -cpu cortex-a76    : a common ARMv8.2-A core (matches the linker/load assumptions)
+# -m M               : Amount of RAM
 # -nographic         : serial + console go to this terminal (no GUI window)
 # -kernel <elf>      : QEMU loads the ELF and jumps to its entry symbol (_start)
 # -no-reboot         : halt instead of rebooting if the guest triggers a reset
@@ -48,14 +48,13 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 # Any extra args passed to this script are forwarded to QEMU, e.g.
 #   ./scripts/run-qemu.sh build/floss_kernel -S   # pause at startup for gdb
 #
-# Use the following options and commands to dump the DeviceTree to a plain text
-# file:
+# Use the following options and commands to dump the DeviceTree to a plain text file:
 #   QEMU Option(s): -M dumpdtb=dump.dtb
 #   Command line dtb -> dts: dtc -I dtb -O dts -o device-tree-plain-text.dts dump.dtb
-#   -cpu cortex-a53 \
+    #-M virt,gic-version=$FLOSS_GIC_VERSION \
 exec qemu-system-aarch64 \
     -M virt,gic-version=$FLOSS_GIC_VERSION \
-    -cpu cortex-a76 \
+    -cpu cortex-a72 \
     -m 2G \
     -nographic \
     -no-reboot \

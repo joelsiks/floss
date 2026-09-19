@@ -379,7 +379,7 @@ static void dispatch_if_prop_match(const DeviceTree::NodeFrame* node_frame,
   }
 }
 
-static const uint32_t PhandleNodeMappingCapacity = 8;
+static const uint32_t PhandleNodeMappingCapacity = 100;
 static uint32_t _num_phandle_to_node_mappings = 0;
 static DeviceTree::NodeMapping _phandle_node_mapping[PhandleNodeMappingCapacity];
 

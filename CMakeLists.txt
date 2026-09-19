@@ -60,7 +60,7 @@ add_custom_target(run
             ${CMAKE_BINARY_DIR}/floss_kernel
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     USES_TERMINAL
-    COMMENT "Booting floss_kernel under QEMU (virt / cortex-a53)"
+    COMMENT "Booting floss_kernel under QEMU (virt)"
 )
 add_dependencies(run floss_kernel)
 

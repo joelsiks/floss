@@ -3,7 +3,7 @@
  *
  * The load address (BASE) and overall layout depend on the target:
  *   - QEMU "virt" machine : 0x40080000  (default below)
- *   - Raspberry Pi 3/4    : 0x00080000  (kernel8.img is loaded here)
+ *   - Raspberry Pi 3/4/5  : 0x00080000  (kernel8.img is loaded here)
  *
  * ENTRY(_start) names the first instruction to execute. The startup code must
  * define a global label matching it.
