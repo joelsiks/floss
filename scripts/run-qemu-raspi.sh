@@ -35,7 +35,7 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 exec qemu-system-aarch64 \
     -M raspi3b \
     -cpu cortex-a72 \
-    -dtb bcm2710-rpi-3-b.dtb \
+    -dtb devicetrees/bcm2712-rpi-5-b.dtb \
     -m 1G \
     -nographic \
     -no-reboot \

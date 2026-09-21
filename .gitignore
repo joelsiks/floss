@@ -8,8 +8,11 @@
 *.img
 *.o
 *.a
+
+# Device Trees
 *.dtb
 *.dts
+devicetrees/
 
 # CMake / tooling
 compile_commands.json

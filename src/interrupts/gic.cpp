@@ -11,10 +11,11 @@
 static GIC::DriverV3 _driver_v3;
 static GIC::DriverV2 _driver_v2;
 
-static GIC::GICDriver* _driver;
+static GIC::GICDriver* _driver = nullptr;
 
 struct GICRegs {
-  DeviceTree::RegPair _pairs[2];
+  static const uint32_t NumRegPairs = 2;
+  DeviceTree::RegPair _pairs[NumRegPairs];
 };
 
 static GICRegs parse_dt(const DeviceTree::NodeFrame* node_frame) {
@@ -28,9 +29,11 @@ static GICRegs parse_dt(const DeviceTree::NodeFrame* node_frame) {
       const uint32_t rp_size_bytes = node_frame->_parent_cells.byte_size();
       const uint32_t num_reg_pairs = prop->_len / rp_size_bytes;
 
+      kprecond(num_reg_pairs >= GICRegs::NumRegPairs);
       kassert(prop->_len % rp_size_bytes == 0, "Invalid reg length (%d, rp size %d)\n", prop->_len, rp_size_bytes);
 
-      for (uint32_t j = 0; j < num_reg_pairs; j++) {
+      // Right now we only care about the first two
+      for (uint32_t j = 0; j < GICRegs::NumRegPairs; j++) {
         DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &regs._pairs[j]);
         current_value = (const char*)current_value + rp_size_bytes;
       }

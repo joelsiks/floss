@@ -379,7 +379,7 @@ static void dispatch_if_prop_match(const DeviceTree::NodeFrame* node_frame,
   }
 }
 
-static const uint32_t PhandleNodeMappingCapacity = 100;
+static const uint32_t PhandleNodeMappingCapacity = 300;
 static uint32_t _num_phandle_to_node_mappings = 0;
 static DeviceTree::NodeMapping _phandle_node_mapping[PhandleNodeMappingCapacity];
 
@@ -396,6 +396,24 @@ uint32_t DeviceTree::NodeCells::lookup_interrupt_cells() const {
 
   kpanic("phandle %x cannot be found", _interrupt_parent);
   return 0;
+}
+
+static bool is_ignored_node(const char* node_name) {
+  if (node_name == nullptr) {
+    return false;
+  }
+
+  // Nodes starting with "__" are ignored
+  if (node_name[0] == '_' && node_name[1] == '_') {
+    return true;
+  }
+
+  // The "aliases" node is ignored
+  if(strcmp(node_name, "aliases") == 0) {
+    return true;
+  }
+
+  return false;
 }
 
 static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDeviceTree* fdt) {
@@ -446,6 +464,7 @@ static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDevice
         if (mapping._phandle != 0) {
           _phandle_node_mapping[_num_phandle_to_node_mappings] = mapping;
           _num_phandle_to_node_mappings++;
+          kpostcond(_num_phandle_to_node_mappings < PhandleNodeMappingCapacity);
         }
 
         // Move down in the parsing frame stack. The _top value is 0 if the node
@@ -456,6 +475,10 @@ static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDevice
       }
       break;
       case DeviceTree::Token::Prop:
+        if (is_ignored_node(parsing_frame.current()->_name)) {
+          continue;
+        }
+
         // Store the prop data in the current slot
         parsing_frame.current()->current_prop()->_name = dtp.prop_name();
         parsing_frame.current()->current_prop()->_value = dtp.prop_value();
@@ -519,6 +542,10 @@ static DeviceTree::Status parse_frames_full(const DeviceTree::FlattenedDeviceTre
       }
       break;
       case DeviceTree::Token::Prop:
+        if (is_ignored_node(parsing_frame.current()->_name)) {
+          continue;
+        }
+
         if (strcmp(dtp.prop_name(), "#address-cells") == 0) {
           parsing_frame.current()->_own_cells._address = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else if (strcmp(dtp.prop_name(), "#size-cells") == 0) {

@@ -41,7 +41,7 @@ namespace DeviceTree {
 
   // Gives a total static allocation size of:
   // MaxNodeDepth * sizeof(PropFrame) * MaxPropsPerNode
-  const uint32_t MaxPropsPerNode = 200;
+  const uint32_t MaxPropsPerNode = 30;
   const uint32_t MaxNodeDepth    = 8;
 
   struct PropFrame {
