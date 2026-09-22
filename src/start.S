@@ -17,7 +17,6 @@ _start:
   cmp   x0, #2
   b.ne  .Lskip_drop
 
-
   mov   x0, #1
   lsl   x0, x0, #31
   msr   HCR_EL2, x0

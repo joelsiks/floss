@@ -264,6 +264,7 @@ static const uint64_t SCTLR_MMU_ENABLE = 1 << 0;
 
 void MMU::enable() {
   // System Control Register (EL1)
+  // We set SCTLR_EL1.M (MMU enable for EL1&0 stage 1 address translation)
 
   uint64_t temp;
   asm volatile(
