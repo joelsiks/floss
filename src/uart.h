@@ -9,6 +9,8 @@ namespace UART {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);
   uint32_t intid();
 
+  void initialize();
+
   void pl011_toggle_rx_interrupts(bool on);
   void pl011_toggle_tx_interrupts(bool on);
 

@@ -9,21 +9,30 @@
 
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
-  volatile uint32_t DR;   // 0x00, Data Register,
-                          // - Bit 5 (TXFF) — transmit FIFO full. Set ⇒ wait before writing.
-                          // - Bit 4 (RXFE) — receive FIFO empty. Set ⇒ no byte available yet.
+  volatile uint32_t DR;    // 0x00, Data Register,
+                           // - Bit 5 (TXFF) — transmit FIFO full. Set ⇒ wait before writing.
+                           // - Bit 4 (RXFE) — receive FIFO empty. Set ⇒ no byte available yet.
   char _unused0[20];
-  volatile uint32_t FR;   // 0x18, Flag Register
-  char _unused1[21];
-  volatile uint32_t IFLS; // 0x34 Interrupt Fifo Level Select
-  volatile uint32_t IMSC; // 0x38 Interrupt Mask Set Clear
-  volatile uint32_t RIS;  // 0x3C Raw Interrupt Status Register
-  volatile uint32_t MIS;  // 0x40 Masked Interrupt Status Register
+  volatile uint32_t FR;    // 0x18 Flag Register
+  char _unused1[8];
+  volatile uint32_t IBRD;  // 0x24 Integer Baud Rate Register
+  volatile uint32_t FBRD;  // 0x28 Fractional Baud Rate Register
+  volatile uint32_t LCR_H; // 0x2C Line Control Register
+  volatile uint32_t CR;    // 0x30 Control Register
+  volatile uint32_t IFLS;  // 0x34 Interrupt Fifo Level Select
+  volatile uint32_t IMSC;  // 0x38 Interrupt Mask Set Clear
+  volatile uint32_t RIS;   // 0x3C Raw Interrupt Status Register
+  volatile uint32_t MIS;   // 0x40 Masked Interrupt Status Register
+  char _unused2[4];
+  volatile uint32_t DMACR; // 0x48 DMA Control Register
 };
 
 static MMDR_UART* uart = nullptr;
 
 static DeviceTree::Interrupts _uart_interrupts;
+
+static const uint32_t BAUD_RATE = 115200;
+static uint32_t _uart_clock_frequency = 0;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -56,12 +65,73 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
       for (uint32_t j = 0; j < num_interrupts; j++) {
         _uart_interrupts.register_intid(DeviceTree::read_interrupt_id(prop, j, interrupt_cells));
       }
+    } else if(strcmp(prop->_name, "clocks") == 0) {
+      const uint32_t clock_phandle = DeviceTree::Parser::read_u32(prop->_value);
+      _uart_clock_frequency = DeviceTree::lookup_clock_frequency(clock_phandle);
     }
   }
 }
 
 uint32_t UART::intid() {
   return _uart_interrupts.get(0);
+}
+
+static void calculate_divisors(uint32_t& integer, uint32_t& fractional) {
+  kprecond(_uart_clock_frequency != 0);
+  // Cred: https://krinkinmu.github.io/2020/11/29/PL011.html#calculating-baudrate-divisiors
+  // Although the UART (PL011) Reference Manual has great instructions as well
+
+  // 64 * F_UARTCLK / (16 * B) = 4 * F_UARTCLK / B
+  const uint32_t div = 4 * _uart_clock_frequency / BAUD_RATE;
+
+  fractional = div & 0x3f;
+  integer = (div >> 6) & 0xffff;
+}
+
+static void pl011_wait_poll_tx_complete() {
+  while ((uart->FR & 0b100000) != 0) { }
+}
+
+static void pl011_wait_poll_rx_complete() {
+  while ((uart->FR & 0b010000) != 0) { }
+}
+
+static const uint32_t CR_RXE = 1 << 9; // Receive enable
+static const uint32_t CR_TXE = 1 << 8; // Transmit enable
+static const uint32_t CR_UARTEN = 1 << 0; // UART Enable
+
+static const uint32_t LCR_H_FEN = 1 << 4; // Enable FIFO
+
+static const uint32_t DMACR_TXDMAE = 1 << 1; // Transmit DMA enable
+static const uint32_t DMACR_RXDMAE = 1 << 0; // Receive DMA enable
+
+void UART::initialize() {
+  // Disable UART via UARTEN, RXE, and TXE bits
+  uart->CR = (uart->CR & ~(CR_RXE | CR_TXE | CR_UARTEN));
+
+  // Wait for any ongoing transmissions to complete
+  pl011_wait_poll_tx_complete();
+
+  // Flush FIFOs
+  uart->LCR_H = (uart->LCR_H & (~LCR_H_FEN));
+
+  // Configure baud rate/frequency
+  uint32_t ibrd, fbrd;
+  calculate_divisors(ibrd, fbrd);
+  uart->IBRD = ibrd;
+  uart->FBRD = fbrd;
+
+  // Mask all interrupts
+  UART::pl011_toggle_rx_interrupts(true);
+  // TODO: Move to TX interrupts instead of DMA
+  //UART::pl011_toggle_tx_interrupts(true);
+
+  // Disable DMA
+  //uart->DMACR = (uart->DMACR & ~DMACR_RXDMAE);
+  //uart->DMACR = (uart->DMACR & ~DMACR_TXDMAE);
+
+  // Enable UART via UARTEN, RXE, and TXE bits
+  uart->CR = (uart->CR | CR_RXE | CR_TXE | CR_UARTEN);
 }
 
 // Bits for the Interrupt Mask Set Clear register
@@ -87,14 +157,6 @@ void UART::pl011_toggle_rx_interrupts(bool on) {
 
 void UART::pl011_toggle_tx_interrupts(bool on) {
   toggle_imsc_mask(on, IMSC_TXIM_BIT);
-}
-
-static void pl011_wait_poll_tx_complete() {
-  while ((uart->FR & 0b100000) != 0) { }
-}
-
-static void pl011_wait_poll_rx_complete() {
-  while ((uart->FR & 0b010000) != 0) { }
 }
 
 void UART::pl011_send_char(char c) {

@@ -92,10 +92,12 @@ namespace DeviceTree {
   struct NodeMapping {
     uint32_t  _phandle{0};
 
-    // We might want to add more information here in the future. Instances
-    // will only track some of the fields below.
+    // Instances might (likely will) only track some of the fields below
     uint32_t _interrupt_cells{0};
+    uint32_t _clock_frequency{0};
   };
+
+  uint32_t lookup_clock_frequency(uint32_t phandle);
 
   enum class MatchKind {
     Compatible,

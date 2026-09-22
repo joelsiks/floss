@@ -25,6 +25,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
     return;
   }
 
+  UART::initialize();
+
   Memory::Map::init(fdt);
 
   const uint64_t el = Exception::get_exception_level();
@@ -38,8 +40,6 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   Timer::set_timer();
   Timer::enable();
-
-  UART::pl011_toggle_rx_interrupts(true);
 
   MMU::setup_idmap_page_tables();
 

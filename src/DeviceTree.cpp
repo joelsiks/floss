@@ -383,6 +383,19 @@ static const uint32_t PhandleNodeMappingCapacity = 300;
 static uint32_t _num_phandle_to_node_mappings = 0;
 static DeviceTree::NodeMapping _phandle_node_mapping[PhandleNodeMappingCapacity];
 
+uint32_t DeviceTree::lookup_clock_frequency(uint32_t phandle) {
+  for (uint32_t i = 0; i < _num_phandle_to_node_mappings; i++) {
+    if (_phandle_node_mapping[i]._phandle == phandle) {
+      const uint32_t clock_frequency = _phandle_node_mapping[i]._clock_frequency;
+      kprecond(clock_frequency != 0);
+      return clock_frequency;
+    }
+  }
+
+  ShouldNotReachHere();
+  return 0;
+}
+
 uint32_t DeviceTree::NodeCells::lookup_interrupt_cells() const {
   kprecond(_interrupt_parent != 0);
 
@@ -454,10 +467,14 @@ static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDevice
         for (uint32_t i = 0; i < parsing_frame.current()->_nprops; i++) {
           const DeviceTree::PropFrame* prop = &parsing_frame.current()->_props[i];
 
+          const uint32_t value = DeviceTree::Parser::read_u32(prop->_value);
+
           if (strcmp(prop->_name, "phandle") == 0) {
-            mapping._phandle = DeviceTree::Parser::read_u32(prop->_value);
+            mapping._phandle = value;
           } else if (strcmp(prop->_name, "#interrupt-cells") == 0) {
-            mapping._interrupt_cells = DeviceTree::Parser::read_u32(prop->_value);
+            mapping._interrupt_cells = value;
+          } else if (strcmp(prop->_name, "clock-frequency") == 0) {
+            mapping._clock_frequency = value;
           }
         }
 
