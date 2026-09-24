@@ -384,12 +384,27 @@ static uint32_t _num_phandle_to_node_mappings = 0;
 static DeviceTree::NodeMapping _phandle_node_mapping[PhandleNodeMappingCapacity];
 
 uint32_t DeviceTree::lookup_clock_frequency(uint32_t phandle) {
-  for (uint32_t i = 0; i < _num_phandle_to_node_mappings; i++) {
-    if (_phandle_node_mapping[i]._phandle == phandle) {
-      const uint32_t clock_frequency = _phandle_node_mapping[i]._clock_frequency;
-      kprecond(clock_frequency != 0);
-      return clock_frequency;
+  // Some devicetrees nest clocks and a clock node may not carry a
+  // "clock-frequency" itself but instead reference its parent clock through
+  // its own "clocks" property. Let's follow the chain until a frequency is found.
+  while (phandle != 0) {
+    const NodeMapping* mapping = nullptr;
+    for (uint32_t i = 0; i < _num_phandle_to_node_mappings; i++) {
+      if (_phandle_node_mapping[i]._phandle == phandle) {
+        mapping = &_phandle_node_mapping[i];
+        break;
+      }
     }
+
+    if (mapping == nullptr) {
+      break;
+    }
+
+    if (mapping->_clock_frequency != 0) {
+      return mapping->_clock_frequency;
+    }
+
+    phandle = mapping->_parent_clock;
   }
 
   ShouldNotReachHere();
@@ -475,6 +490,8 @@ static DeviceTree::Status parse_frames_phandle(const DeviceTree::FlattenedDevice
             mapping._interrupt_cells = value;
           } else if (strcmp(prop->_name, "clock-frequency") == 0) {
             mapping._clock_frequency = value;
+          } else if (strcmp(prop->_name, "clocks") == 0) {
+            mapping._parent_clock = value;
           }
         }
 

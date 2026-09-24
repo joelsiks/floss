@@ -95,6 +95,11 @@ namespace DeviceTree {
     // Instances might (likely will) only track some of the fields below
     uint32_t _interrupt_cells{0};
     uint32_t _clock_frequency{0};
+
+    // Phandle of the parent clock, taken from this node's "clocks" property.
+    // Some devicetrees (e.g. Raspberry Pi) nest clocks, so a clock node may
+    // only provide a frequency via one of its parents.
+    uint32_t _parent_clock{0};
   };
 
   uint32_t lookup_clock_frequency(uint32_t phandle);
