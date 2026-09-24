@@ -586,6 +586,10 @@ static DeviceTree::Status parse_frames_full(const DeviceTree::FlattenedDeviceTre
           parsing_frame.current()->_own_cells._size = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else if (strcmp(dtp.prop_name(), "interrupt-parent") == 0) {
           parsing_frame.current()->_own_cells._interrupt_parent = DeviceTree::Parser::read_u32(dtp.prop_value());
+        } else if (strcmp(dtp.prop_name(), "ranges") == 0) {
+          const uint32_t len = dtp.prop_len();
+          const uint32_t child_bus_addr = DeviceTree::Parser::read_u32(dtp.prop_value());
+          //parsing_frame.current()->_own_cells._interrupt_parent = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else {
           // Store the prop data in the current slot
           parsing_frame.current()->current_prop()->_name = dtp.prop_name();

@@ -52,7 +52,7 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 #   QEMU Option(s): -M dumpdtb=dump.dtb
 #   Command line dtb -> dts: dtc -I dtb -O dts -o device-tree-plain-text.dts dump.dtb
     #-M virt,gic-version=$FLOSS_GIC_VERSION \
-exec qemu-system-aarch64 \
+exec /home/joel/dev/qemu/build/qemu-system-aarch64 \
     -M virt,gic-version=$FLOSS_GIC_VERSION \
     -cpu cortex-a72 \
     -m 2G \
