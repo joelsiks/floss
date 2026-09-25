@@ -48,8 +48,10 @@ void GIC::dt_parse_v2(const DeviceTree::NodeFrame* node_frame) {
   _driver = &_driver_v2;
 
   GICRegs regs = parse_dt(node_frame);
-  _driver_v2.set_gicd_base(reinterpret_cast<uintptr_t>(regs._pairs[0]._address));
-  _driver_v2.set_gicc_base(reinterpret_cast<uintptr_t>(regs._pairs[1]._address));
+  const uintptr_t phys_gicd_base = DeviceTree::translate_address(node_frame, regs._pairs[0]._address);
+  const uintptr_t phys_gicc_base = DeviceTree::translate_address(node_frame, regs._pairs[1]._address);
+  _driver_v2.set_gicd_base(phys_gicc_base);
+  _driver_v2.set_gicc_base(phys_gicd_base);
 }
 
 void GIC::dt_parse_v3(const DeviceTree::NodeFrame* node_frame) {
@@ -57,8 +59,10 @@ void GIC::dt_parse_v3(const DeviceTree::NodeFrame* node_frame) {
   _driver = &_driver_v3;
 
   GICRegs regs = parse_dt(node_frame);
-  _driver_v3.set_gicd_base(reinterpret_cast<uintptr_t>(regs._pairs[0]._address));
-  _driver_v3.set_gicr_base(reinterpret_cast<uintptr_t>(regs._pairs[1]._address));
+  const uintptr_t phys_gicd_base = DeviceTree::translate_address(node_frame, regs._pairs[0]._address);
+  const uintptr_t phys_gicr_base = DeviceTree::translate_address(node_frame, regs._pairs[1]._address);
+  _driver_v3.set_gicd_base(phys_gicd_base);
+  _driver_v3.set_gicr_base(phys_gicr_base);
 }
 
 GIC::GICDriver* GIC::driver() {
