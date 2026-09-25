@@ -6,7 +6,7 @@
 #include "uart.h"
 #include "util/assert.h"
 
-uint64_t Exception::get_exception_level() {
+uint64_t Exception::exception_level() {
   uint64_t el;
   asm("mrs %0, CurrentEL" : "=r" (el));
   el = el >> 2 & 0b11;
@@ -14,7 +14,7 @@ uint64_t Exception::get_exception_level() {
   return el;
 }
 
-uint64_t Exception::get_cpuid() {
+uint64_t Exception::cpuid() {
   uint64_t mpidr;
   asm volatile(
    "mrs   %0, MPIDR_EL1   \n\t\
@@ -123,7 +123,7 @@ static UART::ReceiveBuffer uart_rx_irq_buffer;
 
 extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
-  kprintf("IRQ INTID %d handled by %d\n", intid, get_cpuid());
+  kprintf("IRQ INTID %d handled by %d\n", intid, cpuid());
 
   kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
 

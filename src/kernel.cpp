@@ -39,9 +39,12 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::initialize();
 
+  kprintf("Booting the floss kernel :)\n");
+  kprintf("====================================\n");
+
   Memory::Map::init(fdt);
 
-  const uint64_t el = Exception::get_exception_level();
+  const uint64_t el = Exception::exception_level();
   kprintf("Kernel running at exception level: %d\n", el);
 
   GIC::driver()->initialize();
