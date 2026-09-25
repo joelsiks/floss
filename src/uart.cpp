@@ -35,6 +35,10 @@ static const uint32_t BAUD_RATE = 115200;
 static uint32_t _uart_clock_frequency = 0;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
+  if (uart != nullptr) {
+    return;
+  }
+
   // Iterate over all the props
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
     const DeviceTree::PropFrame* prop = &node_frame->_props[i];

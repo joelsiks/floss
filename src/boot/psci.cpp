@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "cpu.h"
 #include "util/assert.h"
 
 // The method used to call into the PSCI API.
@@ -36,18 +35,6 @@ void PSCI::dt_parse(const DeviceTree::NodeFrame* node_frame) {
     } else if (strcmp(prop->_name, "method") == 0) {
       PSCI_METHOD = psci_method_from_str(reinterpret_cast<const char*>(prop->_value));
     }
-  }
-}
-
-// Defined in start.S
-extern "C" void* _secondary_start;
-
-void PSCI::boot_secondary_cores() {
-  const uint32_t num_cpus = CPU::num_cpu_cores();
-
-  // Loop over all secondary cores, which are all cores except the first one (id 0)
-  for (uint32_t i = 1; i < num_cpus; i++) {
-    PSCI::boot_core(i, (uint64_t)&_secondary_start, i);
   }
 }
 

@@ -1,5 +1,7 @@
 
 #include "exception.h"
+
+#include "cpu.h"
 #include "interrupts/gic.h"
 #include "kstdio.h"
 #include "timer.h"
@@ -12,18 +14,6 @@ uint64_t Exception::exception_level() {
   el = el >> 2 & 0b11;
 
   return el;
-}
-
-uint64_t Exception::cpuid() {
-  uint64_t mpidr;
-  asm volatile(
-   "mrs   %0, MPIDR_EL1   \n\t\
-    and   %0, %0, #0xff   \n\t\
-    "
-    : "=r"(mpidr) :: "memory"
-  );
-
-  return mpidr;
 }
 
 void Exception::mask_irqs() {
@@ -123,7 +113,7 @@ static UART::ReceiveBuffer uart_rx_irq_buffer;
 
 extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
-  kprintf("IRQ INTID %d handled by %d\n", intid, cpuid());
+  kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
 
   kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
 

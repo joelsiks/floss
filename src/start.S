@@ -65,10 +65,8 @@ _start:
   bl    kern_main
   b     park
 
-/* This method is entered via a call to PSCI CPU_ON, where we pass the cpu/core
-   id in x0 */
+# This method is called from PSCI and SpinTable CPU enable methods with no arguments
 _secondary_start:
-  mov   x18, x0
   bl    setup_stack
 
   # Link the VBAR (Vector Base Address Register)
@@ -76,7 +74,6 @@ _secondary_start:
   msr   VBAR_EL1, x0
   isb
 
-  mov   x0, x18
   bl    secondary_main
   b     park
 

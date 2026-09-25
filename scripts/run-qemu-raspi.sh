@@ -33,10 +33,10 @@ fi
 aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 
 exec /home/joel/dev/qemu/build/qemu-system-aarch64 \
-    -M raspi3b \
+    -M raspi4b \
     -cpu cortex-a72 \
-    -dtb devicetrees/bcm2710-rpi-3-b.dtb \
-    -m 1G \
+    -dtb devicetrees/bcm2711-rpi-4-b.dtb \
+    -m 2G \
     -nographic \
     -no-reboot \
     -gdb tcp::1234 \

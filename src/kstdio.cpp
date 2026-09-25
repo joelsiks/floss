@@ -60,6 +60,9 @@ void vkprintf(const char *format, va_list args) {
         if (specifier == 'd') {
           const int number = va_arg(args, int);
           kprintf_print_number(number, 10);
+        } else if (specifier == 'z') {
+          const uint64_t number = va_arg(args, uint64_t);
+          kprintf_print_number(number, 10);
         } else if (specifier == 's') {
           const char* str = va_arg(args, const char*);
           if (str != nullptr) {

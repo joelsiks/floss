@@ -1,17 +1,18 @@
 
 #include <cstring>
 
+#include "cpu.h"
 #include "DeviceTree.h"
 #include "exception.h"
 #include "interrupts/gic.h"
 #include "kstdio.h"
 #include "memory/map.h"
 #include "memory/mmu.h"
-#include "psci.h"
 #include "timer.h"
 #include "uart.h"
 
-extern "C" void secondary_main(uint64_t cpu_id) {
+extern "C" void secondary_main() {
+  const uint64_t cpu_id = CPU::id();
   kprintf("Running core %d\n", cpu_id);
   GIC::driver()->initialize_core_specific();
   Exception::unmask_irqs();
@@ -39,8 +40,7 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::initialize();
 
-  kprintf("Booting the floss kernel :)\n");
-  kprintf("====================================\n");
+  kprintf("Booting the floss kernel\n");
 
   Memory::Map::init(fdt);
 
@@ -57,9 +57,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   Timer::enable();
 
   // Call the secondary_main for the boot core
-  secondary_main(0);
+  secondary_main();
 
-  // Then spin up and boot all other cores, which will call secondary_main
-  // as well
-  PSCI::boot_secondary_cores();
+  // Then spin up and boot all other cores, which will call secondary_main as well
+  CPU::boot_secondary_cores();
 }
