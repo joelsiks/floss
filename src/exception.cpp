@@ -109,24 +109,21 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   return bad_ec;
 }
 
-static UART::ReceiveBuffer uart_rx_irq_buffer;
-
 extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
-  kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
+  //kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
 
   kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
 
   if (intid == 30) {
-    kprintf("Generic Timer Interrupt (INTID %d)\n", intid);
+    kprintf("[%z] Generic Timer Interrupt (INTID %d)\n", CPU::id(), intid);
     Timer::set_timer();
-  } else if (intid == 33) {
-    char c = UART::pl011_recv_async();
-    uart_rx_irq_buffer.buffer_char(c);
-    kprintf("Buffering char %d (INTID %d)\n", c, intid);
-    uart_rx_irq_buffer.print_buffer();
+  } else if (intid == UART::intid()) {
+    // The UART hardware has sent an interrupt signaling that there is input available to read from ...
+    // The UART hardware has sent an interrupt signaling that there is room available to send character to ...
+    UART::pl011_handle_irq();
   } else {
-    kprintf("Unhandled interrupt with INTID: %d\n", intid);
+    kprintf("[%z] Unhandled interrupt with INTID: %d\n", CPU::id(), intid);
   }
 
   return intid;

@@ -6,7 +6,6 @@
 #include "DeviceTree.h"
 #include "util/assert.h"
 
-
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
   volatile uint32_t DR;    // 0x00, Data Register,
@@ -23,7 +22,7 @@ struct MMDR_UART {
   volatile uint32_t IMSC;  // 0x38 Interrupt Mask Set Clear
   volatile uint32_t RIS;   // 0x3C Raw Interrupt Status Register
   volatile uint32_t MIS;   // 0x40 Masked Interrupt Status Register
-  char _unused2[4];
+  volatile uint32_t ICR;   // 0x44 Interrupt Clear Register
   volatile uint32_t DMACR; // 0x48 DMA Control Register
 };
 
@@ -33,6 +32,9 @@ static DeviceTree::Interrupts _uart_interrupts;
 
 static const uint32_t BAUD_RATE = 115200;
 static uint32_t _uart_clock_frequency = 0;
+
+static UART::CharBuffer _rx_buffer;
+static UART::CharBuffer _tx_buffer;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   if (uart != nullptr) {
@@ -93,12 +95,15 @@ static void calculate_divisors(uint32_t& integer, uint32_t& fractional) {
   integer = (div >> 6) & 0xffff;
 }
 
+static const uint32_t FR_TXFF = 1 << 5;
+static const uint32_t FR_RXFE = 1 << 4;
+
 static void pl011_wait_poll_tx_complete() {
-  while ((uart->FR & 0b100000) != 0) { }
+  while ((uart->FR & FR_TXFF) != 0) { }
 }
 
 static void pl011_wait_poll_rx_complete() {
-  while ((uart->FR & 0b010000) != 0) { }
+  while ((uart->FR & FR_RXFE) != 0) { }
 }
 
 static const uint32_t CR_RXE = 1 << 9; // Receive enable
@@ -128,20 +133,18 @@ void UART::initialize() {
 
   // Mask all interrupts
   UART::pl011_toggle_rx_interrupts(true);
-  // TODO: Move to TX interrupts instead of DMA
-  //UART::pl011_toggle_tx_interrupts(true);
 
   // Disable DMA
-  //uart->DMACR = (uart->DMACR & ~DMACR_RXDMAE);
-  //uart->DMACR = (uart->DMACR & ~DMACR_TXDMAE);
+  uart->DMACR = (uart->DMACR & ~DMACR_RXDMAE);
+  uart->DMACR = (uart->DMACR & ~DMACR_TXDMAE);
 
   // Enable UART via UARTEN, RXE, and TXE bits
   uart->CR = (uart->CR | CR_RXE | CR_TXE | CR_UARTEN);
 }
 
 // Bits for the Interrupt Mask Set Clear register
-static const uint32_t IMSC_RXIM_BIT = 1 << 4;
 static const uint32_t IMSC_TXIM_BIT = 1 << 5;
+static const uint32_t IMSC_RXIM_BIT = 1 << 4;
 
 static void toggle_imsc_mask(bool on, uint32_t bit) {
   // Read-Modify-Write. Other bits might be set and we only want to update
@@ -156,15 +159,24 @@ static void toggle_imsc_mask(bool on, uint32_t bit) {
   uart->IMSC = new_mask;
 }
 
-void UART::pl011_toggle_rx_interrupts(bool on) {
-  toggle_imsc_mask(on, IMSC_RXIM_BIT);
-}
-
 void UART::pl011_toggle_tx_interrupts(bool on) {
   toggle_imsc_mask(on, IMSC_TXIM_BIT);
 }
 
-void UART::pl011_send_char(char c) {
+void UART::pl011_toggle_rx_interrupts(bool on) {
+  toggle_imsc_mask(on, IMSC_RXIM_BIT);
+}
+
+char UART::pl011_recv_sync() {
+  pl011_toggle_rx_interrupts(false);
+  pl011_wait_poll_rx_complete();
+  char c = uart->DR;
+  pl011_toggle_rx_interrupts(true);
+  return c;
+}
+
+
+void UART::pl011_send_char_sync(char c) {
   pl011_wait_poll_tx_complete();
 
   if (c == '\n') {
@@ -176,43 +188,91 @@ void UART::pl011_send_char(char c) {
   pl011_wait_poll_tx_complete();
 }
 
-void UART::pl011_send_str(const char* str) {
+void UART::pl011_send_str_sync(const char* str) {
   pl011_wait_poll_tx_complete();
 
   const char* current = str;
   while (*current != '\0') {
-    const char s = *current;
-    if (s == '\n') {
+    const char c = *current;
+    if (c == '\n') {
       uart->DR = (uint32_t)'\r';
       pl011_wait_poll_tx_complete();
     }
 
-    uart->DR = s;
+    uart->DR = c;
     pl011_wait_poll_tx_complete();
 
     current++;
   }
 }
 
-char UART::pl011_recv_sync() {
-  pl011_toggle_rx_interrupts(false);
-  pl011_wait_poll_rx_complete();
-  char c = uart->DR;
-  pl011_toggle_rx_interrupts(true);
-  return c;
+void UART::pl011_send_char_async(const char c) {
+  // Push character(s) to ring buffer
+  if (c == '\n') {
+    _tx_buffer.buffer_char((uint32_t)'\r');
+  }
+
+  _tx_buffer.buffer_char(c);
+  pl011_toggle_tx_interrupts(true);
 }
 
-char UART::pl011_recv_async() {
-  return uart->DR;
+void UART::pl011_send_str_async(const char* str) {
+  // Push each character in str to ring buffer
+  const char* current = str;
+  while (*current != '\0') {
+    const char c = *current;
+    if (c == '\n') {
+      _tx_buffer.buffer_char((uint32_t)'\r');
+    }
+
+    _tx_buffer.buffer_char(c);
+    current++;
+  }
+
+  pl011_toggle_tx_interrupts(true);
 }
 
-UART::ReceiveBuffer::ReceiveBuffer()
+static const uint32_t MIS_TX = 1 << 5; // Transmit masked interrupt status
+static const uint32_t MIS_RX = 1 << 4; // Receive masked interrupt status
+
+void UART::pl011_handle_irq() {
+  const uint32_t mis = uart->MIS;
+
+  const bool tx = (mis & MIS_TX) != 0;
+  const bool rx = (mis & MIS_RX) != 0;
+
+  if (tx) {
+    // We got here since the UART hardware sent an interrupt signaling that
+    // there was room available in the UART's FIFO queue, so a plan write
+    // here is OK
+    char c;
+    while ((uart->FR & FR_TXFF) == 0 && _tx_buffer.read_char(c)) {
+      uart->DR = c;
+    }
+
+    if (_tx_buffer.elements_in_buffer() == 0) {
+      pl011_toggle_tx_interrupts(false);
+    }
+  }
+
+  if (rx) {
+    // We got here since the UART hardware sent an interrupt signaling that
+    // there was data to read, so a plain read of DR here is OK
+    const char c = uart->DR;
+    _rx_buffer.buffer_char(c);
+    _rx_buffer.print_buffer();
+  }
+
+  uart->ICR = mis;
+}
+
+UART::CharBuffer::CharBuffer()
   : _start(0),
     _end(0),
     _empty(true),
     _ring_buffer() {}
 
-void UART::ReceiveBuffer::buffer_char(char c) {
+void UART::CharBuffer::buffer_char(char c) {
   _ring_buffer[_start] = c;
 
   const bool was_same = _start == _end;
@@ -230,7 +290,7 @@ void UART::ReceiveBuffer::buffer_char(char c) {
   _empty = false;
 }
 
-bool UART::ReceiveBuffer::read_char(char& out_c) {
+bool UART::CharBuffer::read_char(char& out_c) {
   if (_empty) {
     return false;
   }
@@ -249,7 +309,7 @@ bool UART::ReceiveBuffer::read_char(char& out_c) {
   return true;
 }
 
-uint8_t UART::ReceiveBuffer::elements_in_buffer() const {
+uint8_t UART::CharBuffer::elements_in_buffer() const {
   if (_empty) {
     return 0;
   } else if (_start <= _end) {
@@ -259,18 +319,18 @@ uint8_t UART::ReceiveBuffer::elements_in_buffer() const {
   }
 }
 
-void UART::ReceiveBuffer::print_buffer() const {
+void UART::CharBuffer::print_buffer() const {
   if (_empty) {
     return;
   }
 
-  UART::pl011_send_str("Ring buffer content: ");
+  UART::pl011_send_str_sync("Ring buffer content: ");
 
   uint8_t current = _start;
   do {
-    UART::pl011_send_char(_ring_buffer[current]);
+    UART::pl011_send_char_sync(_ring_buffer[current]);
     current = (current + 1) % BufferSize;
   } while (current != _end);
 
-  UART::pl011_send_char('\n');
+  UART::pl011_send_char_sync('\n');
 }

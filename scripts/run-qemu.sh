@@ -60,5 +60,5 @@ exec /home/joel/dev/qemu/build/qemu-system-aarch64 \
     -no-reboot \
     -gdb tcp::1234 \
     -kernel "$KERNEL.bin" \
-    -smp 2 \
+    -smp 4 \
     "$@"

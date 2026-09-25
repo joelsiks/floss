@@ -176,21 +176,22 @@ void MMU::setup_idmap_page_tables() {
 
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
 
-  // Normal mapping
-  *table_entry(L1_ID_PAGE_TABLE, 0) |=
-    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
-    PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
-    PTE_BLOCK_TYPE;
-  pte_point_to_offset(L1_ID_PAGE_TABLE, 0, 0);
-  pte_set_mair_attr(L1_ID_PAGE_TABLE, 0, MAIR_INDEX_NORMAL_WB);
 
   // Device mapping
-  *table_entry(L1_ID_PAGE_TABLE, 3) |=
+  *table_entry(L1_ID_PAGE_TABLE, 0) |=
     PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_NO_ACCESS |
     PTE_LA_AF | PTE_LA_SH_NONE | PTE_LA_AP_RW_EL1 |
     PTE_BLOCK_TYPE;
-  pte_point_to_offset(L1_ID_PAGE_TABLE, 3, 3 * L1_ENTRY_SIZE);
-  pte_set_mair_attr(L1_ID_PAGE_TABLE, 3, MAIR_INDEX_DEVICE);
+  pte_point_to_offset(L1_ID_PAGE_TABLE, 0, 0);
+  pte_set_mair_attr(L1_ID_PAGE_TABLE, 0, MAIR_INDEX_DEVICE);
+
+  // Normal mapping
+  *table_entry(L1_ID_PAGE_TABLE, 1) |=
+    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
+    PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
+    PTE_BLOCK_TYPE;
+  pte_point_to_offset(L1_ID_PAGE_TABLE, 1, L1_ENTRY_SIZE);
+  pte_set_mair_attr(L1_ID_PAGE_TABLE, 1, MAIR_INDEX_NORMAL_WB);
 
   set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
 
