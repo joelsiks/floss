@@ -1,8 +1,6 @@
 
 #include "DeviceTree.h"
 
-#include <cstring>
-
 #include "cpu.h"
 #include "interrupts/gic.h"
 #include "psci.h"
@@ -95,6 +93,56 @@ uint32_t DeviceTree::read_interrupt_id(const PropFrame* prop, uint32_t index, ui
       : 16 + number; // PPI
 
   return intid;
+}
+
+// Read `ncells` big-endian 32-bit cells (in order) as a single unsigned value.
+static uint64_t read_cells(const void* p, uint32_t ncells) {
+  const char* b = static_cast<const char*>(p);
+  uint64_t v = 0;
+  for (uint32_t i = 0; i < ncells; i++) {
+    v = (v << 32) | DeviceTree::Parser::read_u32(b + i * sizeof(uint32_t));
+  }
+  return v;
+}
+
+uint64_t DeviceTree::translate_address(const NodeFrame* node, uint64_t address) {
+  // address is expressed in the bus address space of the node's parent. Walk
+  // up through each ancestor's "ranges" property, translating into the parent
+  // bus space at every point until the root is reached.
+  for (const NodeFrame* bus = node->_parent; bus != nullptr; bus = bus->_parent) {
+    const PropFrame* ranges = bus->find_prop("ranges");
+    if (ranges == nullptr || ranges->_len == 0) {
+      // If the parent does not have a "ranges" property, or if it's empty,
+      // then the address is identity-mapped on this parent. Continue searching.
+      continue;
+    }
+
+    const uint32_t child_cells = bus->_own_cells._address;
+    const uint32_t parent_cells = bus->_parent_cells._address;
+    const uint32_t size_cells = bus->_own_cells._size;
+
+    const uint32_t triplet_cells = child_cells + parent_cells + size_cells;
+    const uint32_t num_triplets = ranges->_len / (triplet_cells * NodeCells::BytesPerUnit);
+
+    const char* p = static_cast<const char*>(ranges->_value);
+    for (uint32_t i = 0; i < num_triplets; i++) {
+      const uint64_t child_base = read_cells(p, child_cells);
+      p += child_cells * sizeof(uint32_t);
+
+      const uint64_t parent_base = read_cells(p, parent_cells);
+      p += parent_cells * sizeof(uint32_t);
+
+      const uint64_t length = read_cells(p, size_cells);
+      p += size_cells * sizeof(uint32_t);
+
+      if (address >= child_base && address < child_base + length) {
+        address = parent_base + (address - child_base);
+        break;
+      }
+    }
+  }
+
+  return address;
 }
 
 DeviceTree::Status DeviceTree::Parser::init(const FlattenedDeviceTree* fdt) {
@@ -553,6 +601,7 @@ static DeviceTree::Status parse_frames_full(const DeviceTree::FlattenedDeviceTre
           kpostcond(parsing_frame._top < DeviceTree::MaxNodeDepth);
 
           parsing_frame.current()->_parent_cells = parent_cells;
+          parsing_frame.current()->_parent = &parsing_frame._node_frame[parsing_frame._top - 1];
 
           // Inherit interrupt parent
           parsing_frame.current()->_own_cells._interrupt_parent = parent_cells._interrupt_parent;
@@ -586,10 +635,6 @@ static DeviceTree::Status parse_frames_full(const DeviceTree::FlattenedDeviceTre
           parsing_frame.current()->_own_cells._size = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else if (strcmp(dtp.prop_name(), "interrupt-parent") == 0) {
           parsing_frame.current()->_own_cells._interrupt_parent = DeviceTree::Parser::read_u32(dtp.prop_value());
-        } else if (strcmp(dtp.prop_name(), "ranges") == 0) {
-          const uint32_t len = dtp.prop_len();
-          const uint32_t child_bus_addr = DeviceTree::Parser::read_u32(dtp.prop_value());
-          //parsing_frame.current()->_own_cells._interrupt_parent = DeviceTree::Parser::read_u32(dtp.prop_value());
         } else {
           // Store the prop data in the current slot
           parsing_frame.current()->current_prop()->_name = dtp.prop_name();

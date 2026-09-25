@@ -2,6 +2,7 @@
 #define INCLUDE_DEVICE_TREE
 
 #include <cstdint>
+#include <cstring>
 
 // From QEMU virt documentation https://www.qemu.org/docs/master/system/arm/virt.html
 //
@@ -69,15 +70,26 @@ namespace DeviceTree {
   };
 
   struct NodeFrame {
-    const char* _name;
-    NodeCells   _parent_cells;
-    NodeCells   _own_cells;
-    uint32_t    _nprops;
-    int         _compatible_prop_idx{-1};
-    int         _device_type_prop_idx{-1};
-    PropFrame   _props[MaxPropsPerNode];
+    const char*      _name;
+    NodeCells        _parent_cells;
+    NodeCells        _own_cells;
+    uint32_t         _nprops;
+    int              _compatible_prop_idx{-1};
+    int              _device_type_prop_idx{-1};
+    PropFrame        _props[MaxPropsPerNode];
+    const NodeFrame* _parent{nullptr};
 
     inline PropFrame* current_prop() { return &_props[_nprops]; }
+    inline const PropFrame* find_prop(const char* name) const {
+      for (uint32_t i = 0; i < _nprops; i++) {
+        if (strcmp(_props[i]._name, name) == 0) {
+          return &_props[i];
+        }
+      }
+
+      return nullptr;
+    }
+
     inline PropFrame* compatible_prop() { return _compatible_prop_idx < 0 ? nullptr : &_props[_compatible_prop_idx]; }
     inline PropFrame* device_type_prop() { return _device_type_prop_idx < 0 ? nullptr : &_props[_device_type_prop_idx]; }
   };
@@ -124,6 +136,11 @@ namespace DeviceTree {
 
   void read_reg_pair(const NodeCells* cells, const void* value, RegPair* out_rp);
   uint32_t read_interrupt_id(const PropFrame* prop, uint32_t index, uint32_t interrupt_cells);
+
+  // Translate a child-bus address (as found in a node's "reg" property) up the
+  // tree through each ancestor's "ranges" property into a CPU-physical address.
+  // See Devicetree Specification v0.4, section 2.3.8 ("ranges").
+  uint64_t translate_address(const NodeFrame* node, uint64_t address);
 
   // Chapter 5 of the Devicetree Specification v0.4
   // Raw flattened device tree (FDT) header, as laid out in memory (big-endian)

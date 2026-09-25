@@ -50,7 +50,8 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
       for (uint32_t j = 0; j < num_reg_pairs; j++) {
         DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
         if (j == 0) {
-          uart = reinterpret_cast<MMDR_UART*>(rp._address);
+          const uint64_t phys = DeviceTree::translate_address(node_frame, rp._address);
+          uart = reinterpret_cast<MMDR_UART*>(phys);
         }
 
         current_value = (const char*)current_value + rp_size_bytes;
