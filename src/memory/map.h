@@ -22,6 +22,9 @@ namespace Memory {
 
   RegionList* reserved_regions();
   RegionList* ram_regions();
+  RegionList* device_regions();
+
+  void record_device_region(uint64_t start, uint64_t size);
 
   void init(DeviceTree::FlattenedDeviceTree* fdt);
 };

@@ -6,6 +6,7 @@
 #include "DeviceTree.h"
 #include "interrupts/gicv2.h"
 #include "interrupts/gicv3.h"
+#include "memory/map.h"
 #include "util/assert.h"
 
 static GIC::DriverV3 _driver_v3;
@@ -50,8 +51,13 @@ void GIC::dt_parse_v2(const DeviceTree::NodeFrame* node_frame) {
   GICRegs regs = parse_dt(node_frame);
   const uintptr_t phys_gicd_base = DeviceTree::translate_address(node_frame, regs._pairs[0]._address);
   const uintptr_t phys_gicc_base = DeviceTree::translate_address(node_frame, regs._pairs[1]._address);
-  _driver_v2.set_gicd_base(phys_gicc_base);
-  _driver_v2.set_gicc_base(phys_gicd_base);
+
+  // Record as Device memory
+  Memory::record_device_region(phys_gicd_base, regs._pairs[0]._length);
+  Memory::record_device_region(phys_gicc_base, regs._pairs[1]._length);
+
+  _driver_v2.set_gicd_base(phys_gicd_base);
+  _driver_v2.set_gicc_base(phys_gicc_base);
 }
 
 void GIC::dt_parse_v3(const DeviceTree::NodeFrame* node_frame) {
@@ -61,6 +67,11 @@ void GIC::dt_parse_v3(const DeviceTree::NodeFrame* node_frame) {
   GICRegs regs = parse_dt(node_frame);
   const uintptr_t phys_gicd_base = DeviceTree::translate_address(node_frame, regs._pairs[0]._address);
   const uintptr_t phys_gicr_base = DeviceTree::translate_address(node_frame, regs._pairs[1]._address);
+
+  // Record as Device memory
+  Memory::record_device_region(phys_gicd_base, regs._pairs[0]._length);
+  Memory::record_device_region(phys_gicr_base, regs._pairs[1]._length);
+
   _driver_v3.set_gicd_base(phys_gicd_base);
   _driver_v3.set_gicr_base(phys_gicr_base);
 }

@@ -5,6 +5,7 @@
 
 #include "DeviceTree.h"
 #include "util/assert.h"
+#include "memory/map.h"
 
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
@@ -57,6 +58,10 @@ void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
         DeviceTree::read_reg_pair(&node_frame->_parent_cells, current_value, &rp);
         if (j == 0) {
           const uint64_t phys = DeviceTree::translate_address(node_frame, rp._address);
+
+          // Record as Device memory
+          Memory::record_device_region(phys, rp._length);
+
           uart = reinterpret_cast<MMDR_UART*>(phys);
         }
 

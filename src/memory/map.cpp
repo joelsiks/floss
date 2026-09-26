@@ -10,6 +10,7 @@ extern "C" char __kernel_end[]; // end of kernel image
 
 static Memory::RegionList _reserved_regions;
 static Memory::RegionList _ram_regions;
+static Memory::RegionList _device_regions;
 
 void Memory::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -38,12 +39,20 @@ void Memory::RegionList::add_region(uint64_t start, uint64_t size) {
   _num_regions++;
 }
 
+void Memory::record_device_region(uint64_t start, uint64_t size) {
+  _device_regions.add_region(start, size);
+}
+
 Memory::RegionList* Memory::reserved_regions() {
   return &_reserved_regions;
 }
 
 Memory::RegionList* Memory::ram_regions() {
   return &_ram_regions;
+}
+
+Memory::RegionList* Memory::device_regions() {
+  return &_device_regions;
 }
 
 void Memory::init(DeviceTree::FlattenedDeviceTree* fdt) {

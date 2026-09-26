@@ -246,15 +246,14 @@ void MMU::setup_idmap_page_tables() {
     }
   }
 
-  // Identity map the L1 regions below and above RAM as Device
+  /*
   if (ram_regions->_regions[0]._size != 0) {
     pte_mark_as_block_descriptor_device(L1_ID_PAGE_TABLE, 0);
     pte_point_to_offset(L1_ID_PAGE_TABLE, 0, 0);
     pte_set_mair_attr(L1_ID_PAGE_TABLE, 0, MAIR_INDEX_DEVICE);
     kprintf("VMSA: Identity mapping Device L1 [%p, %p)\n", 0 * L1_ENTRY_SIZE, (0 + 1) * L1_ENTRY_SIZE);
   }
-
-  // TODO: Identity map device after RAM
+  */
 
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
 
