@@ -28,6 +28,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::initialize();
 
+  kprintf("Booting the floss kernel\n");
+
   // In QEMU, if translation is disabled, the default memory type is Device, which
   // requires alignment checking, even though SCTLR_EL1.A is set to 0. To get around
   // this, we setup the identity map of virtual memory at the very start. This feels
@@ -37,8 +39,6 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   //
   // In QEMU >=v9.0.0, see: https://gitlab.com/qemu-project/qemu/-/commit/59754f85ed35cbd5f4bf2663ca2136c78d5b2413
   MMU::setup_idmap_page_tables();
-
-  kprintf("Booting the floss kernel\n");
 
   Memory::init(fdt);
 

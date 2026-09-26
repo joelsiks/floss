@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "util/assert.h"
+#include "kstdio.h"
 
 extern "C" char _start[];       // start of kernel image
 extern "C" char __kernel_end[]; // end of kernel image
@@ -11,6 +12,14 @@ extern "C" char __kernel_end[]; // end of kernel image
 static Memory::RegionList _reserved_regions;
 static Memory::RegionList _ram_regions;
 static Memory::RegionList _device_regions;
+
+static bool regions_overlap(uint64_t start1, uint64_t size1, uint64_t start2, uint64_t size2) {
+  if (size1 == 0 || size2 == 0) {
+    return false;
+  }
+
+  return start1 < (start2 + size2) && start2 < (start1 + size1);
+}
 
 void Memory::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
@@ -35,6 +44,25 @@ void Memory::dt_parse(const DeviceTree::NodeFrame* node_frame) {
 void Memory::RegionList::add_region(uint64_t start, uint64_t size) {
   kprecond(_num_regions < MaxNumRegions - 1);
 
+  // TODO: This does not currently handle the following case, and will create
+  // two regions in the end from this pattern.
+  // [_regions[0])#################[regions[2]]
+  //             [start, start+size)
+
+  // Search through all existing regions and see if they should merge
+  for (uint32_t i = 0; i < _num_regions; i++) {
+    Region* r = &_regions[i];
+    if ((r->_start + r->_size) == start) {
+      r->_size += size;
+      return;
+    } else if ((start + size) == r->_start) {
+      r->_start -= size;
+      r->_size += size;
+      return;
+    }
+  }
+
+  // No existing match. Add new entry
   _regions[_num_regions] = {start, size};
   _num_regions++;
 }
@@ -53,6 +81,19 @@ Memory::RegionList* Memory::ram_regions() {
 
 Memory::RegionList* Memory::device_regions() {
   return &_device_regions;
+}
+
+void Memory::validate_device_regions() {
+ for (uint32_t i = 0; i < _device_regions._num_regions; i++) {
+   const Memory::Region* d = &_device_regions._regions[i];
+   for (uint32_t j = 0; j < _ram_regions._num_regions; j++) {
+     const Memory::Region* r = &_ram_regions._regions[j];
+
+     kassert(!regions_overlap(d->_start, d->_size, r->_start, r->_size),
+             "Device region [%p, %p) overlaps RAM [%p, %p)\n",
+             d->_start, d->_start + d->_size, r->_start, r->_start + r->_size);
+   }
+ }
 }
 
 void Memory::init(DeviceTree::FlattenedDeviceTree* fdt) {

@@ -26,6 +26,8 @@ namespace Memory {
 
   void record_device_region(uint64_t start, uint64_t size);
 
+  void validate_device_regions();
+
   void init(DeviceTree::FlattenedDeviceTree* fdt);
 };
 
