@@ -8,11 +8,10 @@
 extern "C" char _start[];       // start of kernel image
 extern "C" char __kernel_end[]; // end of kernel image
 
-// RAM start and size
-static uint64_t RAM_START = 0;
-static uint64_t RAM_SIZE = 0;
+static Memory::RegionList _reserved_regions;
+static Memory::RegionList _ram_regions;
 
-void Memory::Map::dt_parse(const DeviceTree::NodeFrame* node_frame) {
+void Memory::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   // Iterate over all the props
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
     const DeviceTree::PropFrame* prop = &node_frame->_props[i];
@@ -27,32 +26,36 @@ void Memory::Map::dt_parse(const DeviceTree::NodeFrame* node_frame) {
       DeviceTree::RegPair rp;
       DeviceTree::read_reg_pair(&node_frame->_parent_cells, prop->_value, &rp);
 
-      RAM_START = rp._address;
-      RAM_SIZE = rp._length;
+      _ram_regions.add_region(rp._address, rp._length);
     }
   }
 }
 
-static uint32_t _num_reserved_regions = 0;
-static Memory::Map::Region _reserved_regions[Memory::Map::MaxReservedRegions];
+void Memory::RegionList::add_region(uint64_t start, uint64_t size) {
+  kprecond(_num_regions < MaxNumRegions - 1);
 
-void Memory::Map::reserve_region(uint64_t start, uint64_t size) {
-  kprecond(_num_reserved_regions < MaxReservedRegions - 1);
-  _reserved_regions[_num_reserved_regions] = {start, size};
-  _num_reserved_regions++;
+  _regions[_num_regions] = {start, size};
+  _num_regions++;
 }
 
-Memory::Map::Region* Memory::Map::get_reserved_regions() {
-  return _reserved_regions;
+Memory::RegionList* Memory::reserved_regions() {
+  return &_reserved_regions;
 }
 
-uint32_t Memory::Map::get_num_reserved_regions() {
-  return _num_reserved_regions;
+Memory::RegionList* Memory::ram_regions() {
+  return &_ram_regions;
 }
 
-void Memory::Map::init(DeviceTree::FlattenedDeviceTree* fdt) {
+void Memory::init(DeviceTree::FlattenedDeviceTree* fdt) {
   // Reserve the bootloader "hole"
-  reserve_region(RAM_START, (uint64_t)_start - RAM_START);
+  const uint64_t kernel_start = (uint64_t)_start;
+  for (uint64_t i = 0; i < _ram_regions._num_regions; i++) {
+    Region* ram_region = &_ram_regions._regions[i];
+    if (kernel_start > ram_region->_start && kernel_start < (ram_region->_start + ram_region->_size)) {
+      _reserved_regions.add_region(ram_region->_start, (uint64_t)_start - ram_region->_start);
+      break;
+    }
+  }
 
   // Check the DeviceTree for any reserved memory regions
   DeviceTree::Parser parser;
@@ -66,12 +69,12 @@ void Memory::Map::init(DeviceTree::FlattenedDeviceTree* fdt) {
       break;
     }
 
-    reserve_region(address, address + size);
+    _reserved_regions.add_region(address, size);
   }
 
   // Reserve the kernel
-  reserve_region((uint64_t)_start, (uint64_t)__kernel_end - (uint64_t)_start);
+  _reserved_regions.add_region((uint64_t)_start, (uint64_t)__kernel_end - (uint64_t)_start);
 
   // Reserve the Flattened Device Tree
-  reserve_region((uint64_t)fdt, parser.totalsize());
+  _reserved_regions.add_region((uint64_t)fdt, parser.totalsize());
 }

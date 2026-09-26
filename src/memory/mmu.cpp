@@ -3,7 +3,9 @@
 
 #include <cstdint>
 
+#include "memory/map.h"
 #include "util/assert.h"
+#include "kstdio.h"
 
 extern "C" char _start[];       // start of kernel image
 extern "C" char __kernel_end[]; // end of kernel image
@@ -20,7 +22,7 @@ extern "C" char __kernel_end[]; // end of kernel image
 //  Non-Gathering: we want reads/writes to be independent, not merged
 //  Non-Reordering: we want operations to happen in the way we specify
 //                  them in program order
-//  Non-Early Write Acknowledgement: wait until write ends up in device 
+//  Non-Early Write Acknowledgement: wait until write ends up in device
 //                                   register, not write buffer
 //
 //  Normal memory doesn't trigger hardware side effects like accessing
@@ -35,12 +37,12 @@ extern "C" char __kernel_end[]; // end of kernel image
 //  Shareable: Inner/Outer/None? Inner is usually all caches except LLC,
 //             and outer is usually LLC
 //  Transient: hint that data won't be used for long and is not worth having
-//                 in a cache
+//             in a cache
 
-// Normal Memory. Non-Gathering, Non-Reordering, Non-Eearly Write Acknowledgement
+// Device Memory. Non-Gathering, Non-Reordering, Non-Eearly Write Acknowledgement
 static const uint64_t MAIR_DEVICE_NGNRNE = 0x00;
 
-// Device Memory. Outer+Inner Write-Back, Outer+Inner Read+Write Allocate, Non-Transient
+// Normal Memory. Outer+Inner Write-Back, Outer+Inner Read+Write Allocate, Non-Transient
 // The read+write allocate means that a cache line is allocated on a read/write miss
 static const uint64_t MAIR_NORMAL_WB = 0xFF;
 
@@ -102,8 +104,9 @@ void MMU::set_ttbr(uint64_t translation_table, uint32_t exception_level) {
 
 struct PageTableEntry { uint64_t _entry; };
 
-alignas(4096) static PageTableEntry L0_ID_PAGE_TABLE[512];
-alignas(4096) static PageTableEntry L1_ID_PAGE_TABLE[512];
+alignas(4096) static PageTableEntry L0_ID_PAGE_TABLE[1];  // 512GB
+alignas(4096) static PageTableEntry L1_ID_PAGE_TABLE[32]; // 32GB
+alignas(4096) static PageTableEntry L2_ID_PAGE_TABLE[32 * 512]; // 32GB
 
 static uint64_t* table_entry(PageTableEntry* table, uint64_t idx) {
  return &table[idx]._entry;
@@ -131,6 +134,8 @@ static void pte_point_to_offset(PageTableEntry* table, uint64_t idx, uint64_t of
 }
 
 static const uint64_t L1_ENTRY_SIZE = 1 << 30;
+static const uint64_t L2_ENTRY_SIZE = 1 << 21;
+static const uint64_t L3_ENTRY_SIZE = 1 << 12;
 static const uint64_t NBITS_VAS = 48;
 
 // Type of Page Table Entry
@@ -163,35 +168,95 @@ static const uint64_t PTE_UA_PXN_EL1_NO_ACCESS = (uint64_t)0b1 << 53;
 static const uint64_t PTE_UA_UXN_EL0_ACCESS = (uint64_t)0b0 << 54;
 static const uint64_t PTE_UA_UXN_EL0_NO_ACCESS = (uint64_t)0b1 << 54;
 
+static void pte_mark_as_table_descriptor(PageTableEntry* pte, uint64_t idx) {
+  *table_entry(pte, idx) |= PTE_TABLE_TYPE;
+}
+
+static void pte_mark_as_block_descriptor_normal(PageTableEntry* pte, uint64_t idx) {
+  *table_entry(pte, idx) |=
+    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
+    PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
+    PTE_BLOCK_TYPE;
+}
+
+static void pte_mark_as_block_descriptor_device(PageTableEntry* pte, uint64_t idx) {
+  *table_entry(pte, idx) |=
+    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_NO_ACCESS |
+    PTE_LA_AF | PTE_LA_SH_NONE | PTE_LA_AP_RW_EL1 |
+    PTE_BLOCK_TYPE;
+}
+
 void MMU::setup_idmap_page_tables() {
   // Start by inserting the MAIR values
   setup_mair_ranges();
 
-  // TODO: Detect the size of the kernel and adjust this accordingly
-
   // Start by setting up the single L0 page table entry by marking it as a Table
   // Descriptor type entry. Then point it to the next level (L1 PTE).
-  *table_entry(L0_ID_PAGE_TABLE, 0) |= PTE_TABLE_TYPE;
+  pte_mark_as_table_descriptor(L0_ID_PAGE_TABLE, 0);
   pte_point_to_next_level(L0_ID_PAGE_TABLE, 0, L1_ID_PAGE_TABLE);
 
+  Memory::RegionList* ram_regions = Memory::ram_regions();
+
+  // Each region in ram_region might not be an integer multiple of 1GB, but maybe 2MB or 4K.
+  // If the region is 1GB, map an entire L1 entry, otherwise see if we can map many 2MB entries,
+  // and if not, map many 4K entries.
+  for (uint64_t i = 0; i < ram_regions->_num_regions; i++) {
+    Memory::Region* region = &ram_regions->_regions[i];
+    if (region->_size % L1_ENTRY_SIZE == 0) {
+      // Map as L1 Block descriptors
+
+      const uint64_t ram_start_l1_idx = region->_start / L1_ENTRY_SIZE;
+      const uint64_t ram_l1_mappings = region->_size / L1_ENTRY_SIZE;
+      for (uint64_t i = 0; i < ram_l1_mappings; i++) {
+        const uint64_t l1_idx = ram_start_l1_idx + i;
+
+        // Normal WB identity mappings
+        pte_mark_as_block_descriptor_normal(L1_ID_PAGE_TABLE, l1_idx);
+        pte_point_to_offset(L1_ID_PAGE_TABLE, l1_idx, l1_idx * L1_ENTRY_SIZE);
+        pte_set_mair_attr(L1_ID_PAGE_TABLE, l1_idx, MAIR_INDEX_NORMAL_WB);
+        kprintf("VMSA: Identity mapping Normal L1 [%p, %p)\n", l1_idx * L1_ENTRY_SIZE, (l1_idx + 1) * L1_ENTRY_SIZE);
+      }
+
+    } else if (region->_size % L2_ENTRY_SIZE == 0) {
+      // Map as L2 Block descriptors inside L1 Table descriptors
+
+      // Map all L1 entries in the region as Table descriptors
+      const uint64_t start_l1_idx = region->_start / L1_ENTRY_SIZE;
+      const uint64_t l1_mappings = (region->_size + L1_ENTRY_SIZE - 1) / L1_ENTRY_SIZE;
+      for (uint64_t i = 0; i < l1_mappings; i++) {
+        const uint64_t l1_idx = start_l1_idx + i;
+        pte_mark_as_table_descriptor(L1_ID_PAGE_TABLE, l1_idx);
+      }
+
+      // Then map all L2 entries as Block descriptors
+      const uint64_t start_l2_idx = region->_start / L2_ENTRY_SIZE;
+      const uint64_t l2_mappings = region->_size / L2_ENTRY_SIZE;
+      for (uint64_t i = 0; i < l2_mappings; i++) {
+        const uint64_t l2_idx = start_l2_idx + i;
+        pte_mark_as_block_descriptor_normal(L2_ID_PAGE_TABLE, l2_idx);
+        pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, l2_idx * L2_ENTRY_SIZE);
+        pte_set_mair_attr(L2_ID_PAGE_TABLE, l2_idx, MAIR_INDEX_NORMAL_WB);
+        kprintf("VMSA: Identity mapping Normal L2 [%p, %p)\n", l2_idx * L2_ENTRY_SIZE, (l2_idx + 1) * L2_ENTRY_SIZE);
+      }
+
+      // TODO: Map the remainder as Device?
+    } else {
+      kpanic("Identity map with 4K pages is not implemented yet\n");
+      kassert(region->_size % L3_ENTRY_SIZE == 0, "Invalid alignment/size of ram region: %z\n", region->_size);
+    }
+  }
+
+  // Identity map the L1 regions below and above RAM as Device
+  if (ram_regions->_regions[0]._size != 0) {
+    pte_mark_as_block_descriptor_device(L1_ID_PAGE_TABLE, 0);
+    pte_point_to_offset(L1_ID_PAGE_TABLE, 0, 0);
+    pte_set_mair_attr(L1_ID_PAGE_TABLE, 0, MAIR_INDEX_DEVICE);
+    kprintf("VMSA: Identity mapping Device L1 [%p, %p)\n", 0 * L1_ENTRY_SIZE, (0 + 1) * L1_ENTRY_SIZE);
+  }
+
+  // TODO: Identity map device after RAM
+
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
-
-
-  // Device mapping
-  *table_entry(L1_ID_PAGE_TABLE, 0) |=
-    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_NO_ACCESS |
-    PTE_LA_AF | PTE_LA_SH_NONE | PTE_LA_AP_RW_EL1 |
-    PTE_BLOCK_TYPE;
-  pte_point_to_offset(L1_ID_PAGE_TABLE, 0, 0);
-  pte_set_mair_attr(L1_ID_PAGE_TABLE, 0, MAIR_INDEX_DEVICE);
-
-  // Normal mapping
-  *table_entry(L1_ID_PAGE_TABLE, 1) |=
-    PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
-    PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
-    PTE_BLOCK_TYPE;
-  pte_point_to_offset(L1_ID_PAGE_TABLE, 1, L1_ENTRY_SIZE);
-  pte_set_mair_attr(L1_ID_PAGE_TABLE, 1, MAIR_INDEX_NORMAL_WB);
 
   set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
 

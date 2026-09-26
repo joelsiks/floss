@@ -19,18 +19,6 @@ extern "C" void secondary_main() {
 }
 
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
-  // In QEMU, if translation is disabled, the default memory type is Device, which
-  // requires alignment checking, even though SCTLR_EL1.A is set to 0. To get around
-  // this, we setup the identity map of virtual memory at the very start. This feels
-  // hacky, but it solves the problem right now. Another solution is to compile with
-  // "-mstrict-align", or just make sure everything that is handled early on in the
-  // kernel is aligned to 8 bytes.
-  //
-  // In QEMU >=v9.0.0
-  // See: https://gitlab.com/qemu-project/qemu/-/commit/59754f85ed35cbd5f4bf2663ca2136c78d5b2413
-
-  MMU::setup_idmap_page_tables();
-
   // Start by parsing the flattened device tree so that we have MMIO addresses
   // set up before continuing the setup of the OS
   DeviceTree::Status status = DeviceTree::parse_frames(fdt);
@@ -40,9 +28,19 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::initialize();
 
+  // In QEMU, if translation is disabled, the default memory type is Device, which
+  // requires alignment checking, even though SCTLR_EL1.A is set to 0. To get around
+  // this, we setup the identity map of virtual memory at the very start. This feels
+  // hacky, but it solves the problem right now. Another solution is to compile with
+  // "-mstrict-align", or just make sure everything that is handled early on in the
+  // kernel does aligned accesses.
+  //
+  // In QEMU >=v9.0.0, see: https://gitlab.com/qemu-project/qemu/-/commit/59754f85ed35cbd5f4bf2663ca2136c78d5b2413
+  MMU::setup_idmap_page_tables();
+
   kprintf("Booting the floss kernel\n");
 
-  Memory::Map::init(fdt);
+  Memory::init(fdt);
 
   const uint64_t el = Exception::exception_level();
   kprintf("Kernel running at exception level: %d\n", el);

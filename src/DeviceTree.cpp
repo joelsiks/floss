@@ -11,6 +11,9 @@
 
 // Read a big-endian 32-bit integer from a byte pointer
 static uint32_t be32(const void* p) {
+  // It is important that we do byte-wise loads here and not plain 32-bit/64-bit
+  // loads, as VMSA translation might not be set up yet and unaligned accesses
+  // could therefore raise an exception.
   const uint8_t* b = static_cast<const uint8_t*>(p);
   return (uint32_t(b[0]) << 24) | (uint32_t(b[1]) << 16) |
          (uint32_t(b[2]) << 8)  | uint32_t(b[3]);
@@ -22,16 +25,16 @@ static uint64_t be64(const void* p) {
 }
 
 static const DeviceTree::NodeHandler _node_handlers[] = {
-  { ._match_string = "arm,psci-1.0",       ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse        },
-  { ._match_string = "arm,pl011",          ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse        },
-  { ._match_string = "memory",             ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::Map::dt_parse },
-  { ._match_string = "cpu",                ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse         },
-  { ._match_string = "arm,armv8-timer",    ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = Timer::dt_parse       },
+  { ._match_string = "arm,psci-1.0",       ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = PSCI::dt_parse   },
+  { ._match_string = "arm,pl011",          ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = UART::dt_parse   },
+  { ._match_string = "memory",             ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = Memory::dt_parse },
+  { ._match_string = "cpu",                ._match_kind = DeviceTree::MatchKind::DeviceType, ._on_node = CPU::dt_parse    },
+  { ._match_string = "arm,armv8-timer",    ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = Timer::dt_parse  },
 
   // Interrupt Controller
-  { ._match_string = "arm,gic-400",        ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2      },
-  { ._match_string = "arm,cortex-a15-gic", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2      },
-  { ._match_string = "arm,gic-v3",         ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v3      },
+  { ._match_string = "arm,gic-400",        ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2 },
+  { ._match_string = "arm,cortex-a15-gic", ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v2 },
+  { ._match_string = "arm,gic-v3",         ._match_kind = DeviceTree::MatchKind::Compatible, ._on_node = GIC::dt_parse_v3 },
 };
 
 static const uint32_t NumNodeHandlers = sizeof(_node_handlers) / sizeof(DeviceTree::NodeHandler);

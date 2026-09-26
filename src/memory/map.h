@@ -3,7 +3,7 @@
 
 #include "DeviceTree.h"
 
-namespace Memory::Map {
+namespace Memory {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
   struct Region {
@@ -11,11 +11,17 @@ namespace Memory::Map {
     uint64_t _size;
   };
 
-  const uint32_t MaxReservedRegions = 16;
+  struct RegionList {
+    static const uint32_t MaxNumRegions = 16;
 
-  void reserve_region(uint64_t start, uint64_t size);
-  Region* get_reserved_regions();
-  uint32_t get_num_reserved_regions();
+    uint64_t _num_regions{0};
+    Region   _regions[MaxNumRegions];
+
+    void add_region(uint64_t start, uint64_t size);
+  };
+
+  RegionList* reserved_regions();
+  RegionList* ram_regions();
 
   void init(DeviceTree::FlattenedDeviceTree* fdt);
 };

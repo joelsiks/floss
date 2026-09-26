@@ -44,6 +44,15 @@ file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.c
 )
 add_executable(floss_kernel ${KERNEL_SOURCES})
+
+# DeviceTree.cpp must not emit unaligned accesses as we need to parse the DT
+# before we can setup VMSA and map "normal" memory. Compile it with strict
+# alignment for now and we can revisit this later.
+set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/DeviceTree.cpp
+    PROPERTIES COMPILE_OPTIONS "-mstrict-align"
+)
+
 target_link_options(floss_kernel PRIVATE
     -T ${CMAKE_SOURCE_DIR}/linker/aarch64.ld
 )
