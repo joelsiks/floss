@@ -10,8 +10,6 @@
 // Memory Mapped Device Register for the Universal Asynchronous Receiver-Transmitter (UART)
 struct MMDR_UART {
   volatile uint32_t DR;    // 0x00, Data Register,
-                           // - Bit 5 (TXFF) — transmit FIFO full. Set ⇒ wait before writing.
-                           // - Bit 4 (RXFE) — receive FIFO empty. Set ⇒ no byte available yet.
   char _unused0[20];
   volatile uint32_t FR;    // 0x18 Flag Register
   char _unused1[8];
@@ -38,8 +36,14 @@ static UART::CharBuffer _rx_buffer;
 static UART::CharBuffer _tx_buffer;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
-  if (uart != nullptr) {
-    return;
+  for (uint32_t i = 0; i < node_frame->_nprops; i++) {
+    const DeviceTree::PropFrame* prop = &node_frame->_props[i];
+    if (strcmp(prop->_name, "status") == 0 &&
+        strcmp((const char*)prop->_value, "okay") != 0) {
+      // If the UART node we matched the compatible string on has a status 
+      // property that does not say "okay", we skip it.
+      return;
+    }
   }
 
   // Iterate over all the props

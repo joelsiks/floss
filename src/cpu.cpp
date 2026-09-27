@@ -7,6 +7,7 @@
 #include "boot/SpinTable.h"
 #include "DeviceTree.h"
 #include "util/assert.h"
+#include "kstdio.h"
 
 enum class EnableMethod {
   PSCI,
@@ -89,7 +90,8 @@ void CPU::boot_secondary_cores() {
   // Loop over all cores except the first one (id 0). Those are considered the secondary cores.
   if (_global_enable_method == EnableMethod::PSCI) {
     for (uint32_t i = 1; i < _num_cpu_cores; i++) {
-      PSCI::boot_core(i, (uint64_t)&_secondary_start, i);
+      const int32_t result = PSCI::boot_core(i, (uint64_t)&_secondary_start, i);
+      kprintf("Result from PSCI:boot_core: %d\n", result);
     }
   } else if (_global_enable_method == EnableMethod::SpinTable) {
     for (uint32_t i = 1; i < _num_cpu_cores; i++) {;

@@ -1,5 +1,5 @@
-#ifndef INCLUDE_DEVICE_TREE
-#define INCLUDE_DEVICE_TREE
+#ifndef INCLUDE_DEVICETREE
+#define INCLUDE_DEVICETREE
 
 #include <cstdint>
 #include <cstring>
@@ -253,4 +253,4 @@ namespace DeviceTree {
 
 } // namespace DeviceTree
 
-#endif // INCLUDE_DEVICE_TREE
+#endif // INCLUDE_DEVICETREE

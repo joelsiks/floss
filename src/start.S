@@ -17,9 +17,14 @@ _start:
   cmp   x0, #2
   b.ne  .Lskip_drop
 
+  # Link the VBAR (Vector Base Address Register)
+
   mov   x0, #1
   lsl   x0, x0, #31
   msr   HCR_EL2, x0
+
+  ldr   x0, =vector_table
+  msr   VBAR_EL2, x0
 
   mov   x0, xzr
   # Mask out the DAIF bits

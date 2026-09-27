@@ -43,7 +43,6 @@ uint32_t Timer::intid(GIC::InterruptType interrupt_type) {
       break;
     default:
       ShouldNotReachHere();
-      return 0;
   }
 }
 

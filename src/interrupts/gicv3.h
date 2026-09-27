@@ -35,7 +35,7 @@ namespace GIC {
     void end_of_interrupt(uint32_t id) override;
 
     inline DriverVersion version() override {
-      return DriverVersion::v2;
+      return DriverVersion::v3;
     }
   };
 };

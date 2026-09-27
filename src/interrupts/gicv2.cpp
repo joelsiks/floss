@@ -1,3 +1,4 @@
+
 #include "interrupts/gicv2.h"
 
 #include <cstring>
@@ -198,6 +199,7 @@ void GIC::DriverV2::set_gicc_base(uintptr_t base) {
 //      Must be done by each PE themself
 
 void GIC::DriverV2::initialize() {
+  kprintf("Using GICv2 driver\n");
   initialize_gic_distributor();
 }
 

@@ -1,7 +1,8 @@
 
+#include "kstdio.h"
+
 #include <cstdarg>
 
-#include "kstdio.h"
 #include "uart.h"
 
 template <typename T>

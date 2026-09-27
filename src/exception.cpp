@@ -17,10 +17,14 @@ uint64_t Exception::exception_level() {
 }
 
 void Exception::mask_irqs() {
+  // DAIFSet/DAIFClr bits[3:0] map to F(0), I(1), A(2), D(3). We want the
+  // IRQ (I) bit, i.e. bit 1.
   asm volatile("msr DAIFSet, #0b0010" ::: "memory");
 }
 
 void Exception::unmask_irqs() {
+  // DAIFSet/DAIFClr bits[3:0] map to F(0), I(1), A(2), D(3). We want the
+  // IRQ (I) bit, i.e. bit 1.
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
 
@@ -111,7 +115,8 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 
 extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
-  //kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
+
+  kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
 
   kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
 

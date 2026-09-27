@@ -459,7 +459,6 @@ uint32_t DeviceTree::lookup_clock_frequency(uint32_t phandle) {
   }
 
   ShouldNotReachHere();
-  return 0;
 }
 
 uint32_t DeviceTree::NodeCells::lookup_interrupt_cells() const {

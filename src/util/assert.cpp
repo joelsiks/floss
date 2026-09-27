@@ -5,7 +5,7 @@
 
 #include "kstdio.h"
 
-void report_error(const char* file, int line, const char* error_msg, const char* detail_fmt, ...) {
+[[noreturn]] void report_error(const char* file, int line, const char* error_msg, const char* detail_fmt, ...) {
   va_list args;
   va_start(args, detail_fmt);
 
@@ -15,4 +15,6 @@ void report_error(const char* file, int line, const char* error_msg, const char*
   vkprintf(detail_fmt, args);
 
   va_end(args);
+
+  for (;;) {}
 }

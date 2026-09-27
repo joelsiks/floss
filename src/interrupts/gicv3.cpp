@@ -1,8 +1,6 @@
 
 #include "interrupts/gicv3.h"
 
-#include <cstring>
-
 #include "kstdio.h"
 
 // The Distributor, Redistributor, and Interrupt Translation Service (ITS) are

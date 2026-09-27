@@ -4,27 +4,35 @@
 #include <cstdint>
 #include <cstring>
 
+#include "kstdio.h"
 #include "util/assert.h"
 
 // The method used to call into the PSCI API.
 // Depends on which level PSCI is implemented in (EL2/EL3).
 enum class PSCIMethod {
   Hypervisor, // hvc
-  Supervisor  // smc
+  SecureMonitor, // smc
+  Unknown
 };
 
-static uint64_t PSCI_CPU_ON = 0;
-static PSCIMethod PSCI_METHOD = PSCIMethod::Supervisor; // Sane default
+// The default values for these are mandated by the spec.
+//   0x84000000-0x8400FFFF range is "SMC32: Standard Service Calls"
+//   0xC4000000-0xC400FFFF range is "SMC64: Standard Service Calls"
+static uint64_t PSCI_CPU_ON = 0xC4000003;
+static const uint64_t PSCI_CPU_OFF = 0x84000002; // 32-bit only
+static const uint64_t PSCI_CPU_SUSPEND = 0xC4000001;
+
+static PSCIMethod PSCI_METHOD = PSCIMethod::SecureMonitor; // Sane default
 
 static PSCIMethod psci_method_from_str(const char* method_str) {
   if (strcmp(method_str, "hvc") == 0) {
     return PSCIMethod::Hypervisor;
   } else if (strcmp(method_str, "smc") == 0) {
-    return PSCIMethod::Supervisor;
+    return PSCIMethod::SecureMonitor;
   }
 
   kpanic("Unknown PSCI method '%s'\n", method_str);
-  return PSCIMethod::Supervisor;
+  return PSCIMethod::Unknown;
 }
 
 void PSCI::dt_parse(const DeviceTree::NodeFrame* node_frame) {
@@ -39,6 +47,10 @@ void PSCI::dt_parse(const DeviceTree::NodeFrame* node_frame) {
 }
 
 int32_t PSCI::boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint64_t context_id) {
+  kprecond(PSCI_CPU_ON != 0);
+
+  kprintf("Booting CPU %z with CPU_ON %p\n", target_cpu, PSCI_CPU_ON);
+
   // Implements the "CPU_ON" function identifier.
 
   // Power up a core. This call is used to power up cores that either:
@@ -69,13 +81,16 @@ int32_t PSCI::boot_core(uint64_t target_cpu, uint64_t entry_point_address, uint6
         : "memory"
       );
       break;
-    case PSCIMethod::Supervisor:
+    case PSCIMethod::SecureMonitor:
       asm volatile(
        "smc #0"
         : "+r"(r0) // r0 is both input (function identifier) and output (status)
         : "r"(r1), "r"(r2), "r"(r3)
         : "memory"
       );
+      break;
+    default:
+      // Do nothing for now
       break;
   }
 

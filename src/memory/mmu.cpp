@@ -106,8 +106,8 @@ void MMU::set_ttbr(uint64_t translation_table, uint32_t exception_level) {
 typedef uint64_t PageTableEntry;
 
 alignas(4096) static PageTableEntry L0_ID_PAGE_TABLE[1];  // 512GB
-alignas(4096) static PageTableEntry L1_ID_PAGE_TABLE[32]; // 32GB
-alignas(4096) static PageTableEntry L2_ID_PAGE_TABLE[32 * 512]; // 32GB
+alignas(4096) static PageTableEntry L1_ID_PAGE_TABLE[512]; // 512GB
+alignas(4096) static PageTableEntry L2_ID_PAGE_TABLE[512 * 512]; // 512GB
 
 static const uint32_t MaxNumL3PageTables = 32;
 alignas(4096) static PageTableEntry L3_ID_PAGE_TABLES[MaxNumL3PageTables][512];
@@ -252,6 +252,7 @@ static void map_device_l2_block(uint64_t phys) {
   pte_mark_as_block_descriptor_device(L2_ID_PAGE_TABLE, l2_idx);
   pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, phys);
   pte_set_mair_attr(L2_ID_PAGE_TABLE, l2_idx, MAIR_INDEX_DEVICE);
+  //kprintf("VMSA: Identity mapping Device L2 [%p, %p)\n", phys, phys + L2_ENTRY_SIZE);
 }
 
 static void map_device_l3_page(uint64_t phys) {
@@ -265,6 +266,7 @@ static void map_device_l3_page(uint64_t phys) {
   pte_mark_as_page_descriptor_device(l3_table, l3_idx);
   pte_point_to_offset(l3_table, l3_idx, phys);
   pte_set_mair_attr(l3_table, l3_idx, MAIR_INDEX_DEVICE);
+  //kprintf("VMSA: Identity mapping Device L3 [%p, %p)\n", phys, phys + L3_ENTRY_SIZE);
 }
 
 // Map a device region using the smallest mappings possible: L2 (2MB) blocks
@@ -304,7 +306,6 @@ void MMU::setup_idmap_page_tables() {
   pte_mark_as_table_descriptor(L0_ID_PAGE_TABLE, 0);
   pte_point_to_next_level(L0_ID_PAGE_TABLE, 0, L1_ID_PAGE_TABLE);
 
-
   // 3. Map all RAM as Normal
   Memory::RegionList* ram_regions = Memory::ram_regions();
 
@@ -313,6 +314,8 @@ void MMU::setup_idmap_page_tables() {
   // map many 2MB entries, and if not, map many 4K entries.
   for (uint64_t i = 0; i < ram_regions->_num_regions; i++) {
     Memory::Region* region = &ram_regions->_regions[i];
+    kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
+
     if (region->_size % L1_ENTRY_SIZE == 0) {
       // Map as L1 Block descriptors
 
@@ -325,7 +328,7 @@ void MMU::setup_idmap_page_tables() {
         pte_mark_as_block_descriptor_normal(L1_ID_PAGE_TABLE, l1_idx);
         pte_point_to_offset(L1_ID_PAGE_TABLE, l1_idx, l1_idx * L1_ENTRY_SIZE);
         pte_set_mair_attr(L1_ID_PAGE_TABLE, l1_idx, MAIR_INDEX_NORMAL_WB);
-        kprintf("VMSA: Identity mapping Normal L1 [%p, %p)\n", l1_idx * L1_ENTRY_SIZE, (l1_idx + 1) * L1_ENTRY_SIZE);
+        //kprintf("VMSA: Identity mapping Normal L1 [%p, %p)\n", l1_idx * L1_ENTRY_SIZE, (l1_idx + 1) * L1_ENTRY_SIZE);
       }
 
     } else if (region->_size % L2_ENTRY_SIZE == 0) {
@@ -348,7 +351,7 @@ void MMU::setup_idmap_page_tables() {
         pte_mark_as_block_descriptor_normal(L2_ID_PAGE_TABLE, l2_idx);
         pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, l2_idx * L2_ENTRY_SIZE);
         pte_set_mair_attr(L2_ID_PAGE_TABLE, l2_idx, MAIR_INDEX_NORMAL_WB);
-        kprintf("VMSA: Identity mapping Normal L2 [%p, %p)\n", l2_idx * L2_ENTRY_SIZE, (l2_idx + 1) * L2_ENTRY_SIZE);
+        //kprintf("VMSA: Identity mapping Normal L2 [%p, %p)\n", l2_idx * L2_ENTRY_SIZE, (l2_idx + 1) * L2_ENTRY_SIZE);
       }
     } else {
       kpanic("Identity map with 4K pages is not implemented yet\n");
@@ -367,11 +370,7 @@ void MMU::setup_idmap_page_tables() {
 
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
 
-  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
-
-  setup_translation_control();
-
-  enable();
+  setup_core_specific();
 }
 
 void MMU::setup_translation_control() {
@@ -424,7 +423,8 @@ void MMU::setup_translation_control() {
     0b01     << 10 | // ORGN0
     0b11     << 12 | // SH0
     0b010000 << 16 | // T1SZ
-    0b0      << 23;  // EPD1
+    0b0      << 23 | // EPD1
+    0b101ULL << 32;  // IPS
 
   asm volatile(
    "msr   TCR_EL1, %0 \n\t\
@@ -452,4 +452,12 @@ void MMU::enable() {
     "
     : "=&r"(temp) : "i"(SCTLR_MMU_ENABLE) : "memory"
   );
+}
+
+void MMU::setup_core_specific() {
+  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
+
+  setup_translation_control();
+
+  enable();
 }

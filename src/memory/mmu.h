@@ -12,6 +12,8 @@ namespace MMU {
   void setup_translation_control();
 
   void enable();
+
+  void setup_core_specific();
 };
 
 #endif // INCLUDE_MMU

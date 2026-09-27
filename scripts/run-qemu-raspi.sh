@@ -32,7 +32,7 @@ fi
 
 aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 
-exec /home/joel/dev/qemu/build/qemu-system-aarch64 \
+exec qemu-system-aarch64 \
     -M raspi4b \
     -cpu cortex-a72 \
     -dtb devicetrees/bcm2711-rpi-4-b.dtb \

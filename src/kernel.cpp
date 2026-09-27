@@ -1,6 +1,4 @@
 
-#include <cstring>
-
 #include "cpu.h"
 #include "DeviceTree.h"
 #include "exception.h"
@@ -15,6 +13,7 @@ extern "C" void secondary_main() {
   const uint64_t cpu_id = CPU::id();
   kprintf("Running core %d\n", cpu_id);
   GIC::driver()->initialize_core_specific();
+  MMU::setup_core_specific();
   Exception::unmask_irqs();
 }
 
@@ -49,10 +48,10 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   // Initialize specific interrupts
   GIC::driver()->initialize_interrupt(UART::intid(), GIC::InterruptPriority::Default);
-  GIC::driver()->initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
+  //GIC::driver()->initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
 
-  Timer::set_timer();
-  Timer::enable();
+  //Timer::set_timer();
+  //Timer::enable();
 
   // Call the secondary_main for the boot core
   secondary_main();
