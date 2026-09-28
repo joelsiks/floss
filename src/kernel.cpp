@@ -9,7 +9,7 @@
 #include "timer.h"
 #include "uart.h"
 
-extern "C" void secondary_main() {
+extern "C" void secondary_kern_main() {
   const uint64_t cpu_id = CPU::id();
   kprintf("Running core %d\n", cpu_id);
   GIC::driver()->initialize_core_specific();
@@ -48,14 +48,14 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   // Initialize specific interrupts
   GIC::driver()->initialize_interrupt(UART::intid(), GIC::InterruptPriority::Default);
-  //GIC::driver()->initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
+  GIC::driver()->initialize_interrupt(Timer::intid(GIC::InterruptType::NonSecure), GIC::InterruptPriority::Default);
 
   //Timer::set_timer();
   //Timer::enable();
 
-  // Call the secondary_main for the boot core
-  secondary_main();
+  // Call secondary_kern_main for the boot core
+  secondary_kern_main();
 
-  // Then spin up and boot all other cores, which will call secondary_main as well
+  // Then spin up and boot all other cores, which will call secondary_kern_main as well
   CPU::boot_secondary_cores();
 }

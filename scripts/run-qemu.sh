@@ -51,10 +51,10 @@ aarch64-linux-gnu-objcopy -O binary "$KERNEL" "$KERNEL.bin"
 # Use the following options and commands to dump the DeviceTree to a plain text file:
 #   QEMU Option(s): -M dumpdtb=dump.dtb
 #   Command line dtb -> dts: dtc -I dtb -O dts -o device-tree-plain-text.dts dump.dtb
-#   -M virt,gic-version=$FLOSS_GIC_VERSION \
+#   -M virt,gic-version=$GIC_VERSION \
 exec qemu-system-aarch64 \
-    -M virt,gic-version=$FLOSS_GIC_VERSION \
-    -cpu cortex-a72 \
+    -M virt,virtualization=on,gic-version=$GIC_VERSION \
+    -cpu cortex-a76 \
     -m 2G \
     -nographic \
     -no-reboot \
