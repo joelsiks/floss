@@ -13,9 +13,9 @@ project(floss
 # for gdb (the `run-debug` target opens gdb-multiarch on the built ELF).
 # -g comes from CMAKE_<LANG>_FLAGS_DEBUG; no -O is passed, so the compiler
 # defaults to -O0, which is the easiest to step through. Override at configure
-# time with -DCMAKE_BUILD_TYPE=RelWithDebInfo (or Release) if you want -O2.
+# time with -DCMAKE_BUILD_TYPE=[Debug, Release, RelWithDebInfo, MinSizeRel].
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
 # --- Bare-metal / freestanding options ---------------------------------------
@@ -37,6 +37,22 @@ add_link_options(
     -Wl,--build-id=none # No .note.gnu.build-id section
 )
 
+# --- Platform selection ------------------------------------------------------
+# Override at configure time with -DFLOSS_PLATFORM=virt|rpi
+set(FLOSS_PLATFORM "virt" CACHE STRING "Target platform (virt|rpi)")
+
+if(FLOSS_PLATFORM STREQUAL "virt")
+    set(FLOSS_BASE_ADDR 0x40080000)
+    set(FLOSS_QEMU_SCRIPT ${CMAKE_SOURCE_DIR}/scripts/run-qemu-virt.sh)
+elseif(FLOSS_PLATFORM STREQUAL "rpi")
+    set(FLOSS_BASE_ADDR 0x00080000)
+    set(FLOSS_QEMU_SCRIPT ${CMAKE_SOURCE_DIR}/scripts/run-qemu-rpi.sh)
+else()
+    message(FATAL_ERROR
+        "Unknown FLOSS_PLATFORM '${FLOSS_PLATFORM}' (expected 'virt' or 'rpi')")
+endif()
+message(STATUS "floss platform: ${FLOSS_PLATFORM} (BASE=${FLOSS_BASE_ADDR})")
+
 # --- Kernel image ------------------------------------------------------------
 file(GLOB_RECURSE KERNEL_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.S
@@ -55,6 +71,7 @@ set_source_files_properties(
 
 target_link_options(floss_kernel PRIVATE
     -T ${CMAKE_SOURCE_DIR}/linker/aarch64.ld
+    -Wl,--defsym=BASE=${FLOSS_BASE_ADDR}
 )
 set_target_properties(floss_kernel PROPERTIES LINK_DEPENDS
    ${CMAKE_SOURCE_DIR}/linker/aarch64.ld)
@@ -65,11 +82,11 @@ target_include_directories(floss_kernel PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_custom_target(run
-    COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-qemu.sh
+    COMMAND ${FLOSS_QEMU_SCRIPT}
             ${CMAKE_BINARY_DIR}/floss_kernel
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     USES_TERMINAL
-    COMMENT "Booting floss_kernel under QEMU (virt)"
+    COMMENT "Booting floss_kernel under QEMU (${FLOSS_PLATFORM})"
 )
 add_dependencies(run floss_kernel)
 
@@ -77,10 +94,10 @@ add_dependencies(run floss_kernel)
 # attaches to QEMU's gdbserver on :1234. FLOSS_GDB=1 (set below) enables the pane.
 add_custom_target(run-debug
     COMMAND ${CMAKE_COMMAND} -E env FLOSS_GDB=1
-            ${CMAKE_SOURCE_DIR}/scripts/run-qemu.sh
+            ${FLOSS_QEMU_SCRIPT}
             ${CMAKE_BINARY_DIR}/floss_kernel -S
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     USES_TERMINAL
-    COMMENT "Booting floss_kernel under QEMU, paused (-S) with gdb in a tmux pane"
+    COMMENT "Booting floss_kernel under QEMU (${FLOSS_PLATFORM}), paused (-S) with gdb in a tmux pane"
 )
 add_dependencies(run-debug floss_kernel)

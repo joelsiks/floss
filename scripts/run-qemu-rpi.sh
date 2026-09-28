@@ -8,8 +8,6 @@ set -euo pipefail
 KERNEL="${1:-build/floss_kernel}"
 shift || true   # drop the kernel arg so "$@" holds extra QEMU flags
 
-GIC_VERSION="${FLOSS_GIC_VERSION:-3}"
-
 if [[ ! -f "$KERNEL" ]]; then
     echo "error: kernel image not found: $KERNEL" >&2
     echo "hint: build first with  cmake --build build" >&2
