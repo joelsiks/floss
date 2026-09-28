@@ -9,7 +9,7 @@ namespace CPU {
   // Retrieves the cpu/core/PE id of the current core
   uint64_t id();
 
-  uint32_t num_cores();
+  uint32_t num_cpus();
 
   void boot_secondary_cores();
 };
