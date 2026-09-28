@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Simple script to build floss, strip the ELF to a binary file, and transfer the
-# binary file to an SD card for a Raspberry Pi 5
+# binary file to an SD card for a Raspberry Pi 5.
 
 SD_CARD_DEVICE=/dev/mmcblk0p1
+SD_CARD_MOUNT=/mnt/bootfs
 
 set -e
 set -x
@@ -15,11 +16,11 @@ cmake --build build
 aarch64-linux-gnu-objcopy -O binary build/floss_kernel build/floss_kernel.bin
 
 # Mount SD card
-sudo mount $SD_CARD_DEVICE /mnt/bootfs
+sudo mount $SD_CARD_DEVICE $SD_CARD_MOUNT
 
 # Update file
-rm /mnt/bootfs/kernel_2712.img
-cp build/floss_kernel.bin /mnt/bootfs/kernel_2712.img
+rm $SD_CARD_MOUNT/kernel_2712.img
+cp build/floss_kernel.bin $SD_CARD_MOUNT/kernel_2712.img
 sudo sync
 
 # Unmount SD card

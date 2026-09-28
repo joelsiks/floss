@@ -66,7 +66,6 @@ void CPU::dt_parse(const DeviceTree::NodeFrame* node_frame) {
       DeviceTree::RegPair rp;
       DeviceTree::read_reg_pair(&node_frame->_parent_cells, prop->_value, &rp);
 
-      kprintf("Parsed node with CPU reg: %z %z\n", rp._address, rp._length);
       info->_reg = rp._address;
     }
   }
