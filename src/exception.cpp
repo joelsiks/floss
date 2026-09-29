@@ -118,7 +118,10 @@ extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame
 
   kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
 
-  kprecond(GIC::driver()->version() == GIC::DriverVersion::v2 || (intid != 1022 && intid != 1023));
+  if (intid == 1022 || intid == 1023) {
+    // Spurious interrupts
+    return intid;
+  }
 
   if (intid == 30) {
     kprintf("[%z] Generic Timer Interrupt (INTID %d)\n", CPU::id(), intid);

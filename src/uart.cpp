@@ -35,6 +35,8 @@ static uint32_t _uart_clock_frequency = 0;
 static UART::CharBuffer _rx_buffer;
 static UART::CharBuffer _tx_buffer;
 
+static bool _irqs_ready = false;
+
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
     const DeviceTree::PropFrame* prop = &node_frame->_props[i];
@@ -151,11 +153,17 @@ void UART::initialize() {
   uart->CR = (uart->CR | CR_RXE | CR_TXE | CR_UARTEN);
 }
 
+void UART::signal_irqs_ready() {
+  _irqs_ready = true;
+}
+
 // Bits for the Interrupt Mask Set Clear register
 static const uint32_t IMSC_TXIM_BIT = 1 << 5;
 static const uint32_t IMSC_RXIM_BIT = 1 << 4;
 
 static void toggle_imsc_mask(bool on, uint32_t bit) {
+  kprecond(uart != nullptr);
+
   // Read-Modify-Write. Other bits might be set and we only want to update
   // the bit that we're concerned with here.
 
@@ -215,6 +223,13 @@ void UART::pl011_send_str_sync(const char* str) {
   }
 }
 
+static void pl011_drain_tx() {
+  char c;
+  while ((uart->FR & FR_TXFF) == 0 && _tx_buffer.read_char(c)) {
+    uart->DR = c;
+  }
+}
+
 void UART::pl011_send_char_async(const char c) {
   // Push character(s) to ring buffer
   if (c == '\n') {
@@ -222,7 +237,25 @@ void UART::pl011_send_char_async(const char c) {
   }
 
   _tx_buffer.buffer_char(c);
-  pl011_toggle_tx_interrupts(true);
+
+  // Drain as much as possible before enabling interrupts (or not if tx buffer
+  // is empty), or synchronously drain the whole tx buffer if IRQs are not
+  // enabled yet.
+
+  pl011_drain_tx();
+
+  if (_tx_buffer.elements_in_buffer() == 0) {
+    pl011_toggle_tx_interrupts(false);
+  } else if (_irqs_ready) {
+    pl011_toggle_tx_interrupts(true);
+  } else {
+     // Synchronously drain the buffer if IRQs are not ready yet
+     while (_tx_buffer.elements_in_buffer() != 0) {
+       pl011_wait_poll_tx_complete();
+       pl011_drain_tx();
+     }
+
+  }
 }
 
 void UART::pl011_send_str_async(const char* str) {
@@ -231,14 +264,12 @@ void UART::pl011_send_str_async(const char* str) {
   while (*current != '\0') {
     const char c = *current;
     if (c == '\n') {
-      _tx_buffer.buffer_char((uint32_t)'\r');
+      pl011_send_char_async('\r');
     }
 
-    _tx_buffer.buffer_char(c);
+    pl011_send_char_async(c);
     current++;
   }
-
-  pl011_toggle_tx_interrupts(true);
 }
 
 static const uint32_t MIS_TX = 1 << 5; // Transmit masked interrupt status
@@ -252,13 +283,13 @@ void UART::pl011_handle_irq() {
 
   if (tx) {
     // We got here since the UART hardware sent an interrupt signaling that
-    // there was room available in the UART's FIFO queue, so a plan write
-    // here is OK
-    char c;
-    while ((uart->FR & FR_TXFF) == 0 && _tx_buffer.read_char(c)) {
-      uart->DR = c;
-    }
+    // there was room available in the UART's FIFO queue. Drain as much as
+    // possible before either deferring again (wait for another TX interrupt)
+    // or disabling TX interrupts if the tx buffer is empty.
+    pl011_drain_tx();
 
+    // TX interrupts is already enabled since we got here. If the buffer is
+    // empty, we disable TX interrupts.
     if (_tx_buffer.elements_in_buffer() == 0) {
       pl011_toggle_tx_interrupts(false);
     }
@@ -278,68 +309,73 @@ void UART::pl011_handle_irq() {
 UART::CharBuffer::CharBuffer()
   : _start(0),
     _end(0),
-    _empty(true),
     _ring_buffer() {}
 
+// The CharBuffer is a ring buffer meant for buffering characters that are being
+// received or are about to be sent.
+//
+// Initially, both _start and _end point at 0.
+//
+// When buffering a character, it is placed at the end of the ring buffer, where
+// _end is pointing to. When reading a character from the ring buffer, it is read
+// from the start of the ring buffer, where _start is pointing to.
+//
+// If _end is incremented so that it becomes equal to _start, _start is bumped
+// and we "leak" one character from the buffer. This creates the "ring" effect,
+// effectively writing over itself if the data loops back.
+//
+
 void UART::CharBuffer::buffer_char(char c) {
-  _ring_buffer[_start] = c;
+  _ring_buffer[_end] = c;
 
-  const bool was_same = _start == _end;
+  // Increment end
+  _end = (_end + 1) % BufferSize;
 
-  // Increment start
-  _start = (_start + 1) % BufferSize;
-
-  if (was_same && !_empty) {
-    // If start and end pointed to the same place and the buffer was not empty,
-    // then we "leak" an element by incrementing the end
-    _end = _start;
+  if (_end == _start) {
+    // If we bumped _end so that it is now equal to _start, we "leak" an element
+    // by incrementing _start by one
+    _start = (_start + 1) % BufferSize;
   }
-
-  // We just added something to the buffer, so it is no longer empty
-  _empty = false;
 }
 
 bool UART::CharBuffer::read_char(char& out_c) {
-  if (_empty) {
+  // If start and end are the same the ring buffer is empty
+  if (_start == _end) {
     return false;
   }
 
   // Output the current element
-  out_c = _ring_buffer[_end];
+  out_c = _ring_buffer[_start];
 
-  _end = (_end + 1) % BufferSize;
-
-  if (_end == _start) {
-    // If the end is now equal to the start, then the buffer has been drained
-    // and is now empty
-    _empty = true;
-  }
+  // Increment the start by one
+  _start = (_start + 1) % BufferSize;
 
   return true;
 }
 
 uint8_t UART::CharBuffer::elements_in_buffer() const {
-  if (_empty) {
+  if (_start == _end) {
     return 0;
-  } else if (_start <= _end) {
-    return BufferSize + _start - _end;
-  } else {
+  } else if (_start < _end) {
     return _start - _end;
+  } else {
+    return BufferSize - _start + _end + 1;
   }
 }
 
 void UART::CharBuffer::print_buffer() const {
-  if (_empty) {
+  // If start and end are the same the ring buffer is empty
+  if (_start == _end) {
     return;
   }
 
-  UART::pl011_send_str_sync("Ring buffer content: ");
+  UART::pl011_send_str_async("Ring buffer content: ");
 
   uint8_t current = _start;
   do {
-    UART::pl011_send_char_sync(_ring_buffer[current]);
+    UART::pl011_send_char_async(_ring_buffer[current]);
     current = (current + 1) % BufferSize;
   } while (current != _end);
 
-  UART::pl011_send_char_sync('\n');
+  UART::pl011_send_char_async('\n');
 }

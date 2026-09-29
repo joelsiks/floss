@@ -11,6 +11,7 @@ namespace UART {
   uint32_t intid();
 
   void initialize();
+  void signal_irqs_ready();
 
   void pl011_toggle_tx_interrupts(bool on);
   void pl011_toggle_rx_interrupts(bool on);
@@ -29,10 +30,9 @@ namespace UART {
 
   class CharBuffer {
   private:
-    static const uint8_t BufferSize = 64;
+    static const uint8_t BufferSize = 128;
     uint8_t _start;
     uint8_t _end;
-    bool    _empty;
     char    _ring_buffer[BufferSize];
 
   public:

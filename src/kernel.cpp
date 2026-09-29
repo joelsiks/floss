@@ -15,6 +15,9 @@ extern "C" void secondary_kern_main() {
   GIC::driver()->initialize_core_specific();
   MMU::setup_core_specific();
   Exception::unmask_irqs();
+
+  // Signal that IRQs for RX and TX is ready for at least one core
+  UART::signal_irqs_ready();
 }
 
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {

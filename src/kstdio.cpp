@@ -11,13 +11,13 @@ static void kprintf_print_number(T number, int base) {
 
   // Exit early if number is zero
   if (number == 0) {
-    UART::pl011_send_char_sync('0');
+    UART::pl011_send_char_async('0');
     return;
   }
 
   // Handle negative numbers
   if (number < 0) {
-    UART::pl011_send_char_sync('-');
+    UART::pl011_send_char_async('-');
     number *= -1;
   }
 
@@ -37,7 +37,7 @@ static void kprintf_print_number(T number, int base) {
   }
 
   for (int i = max_idx - 1; i >= 0; i--) {
-    UART::pl011_send_char_sync(number_buf[i]);
+    UART::pl011_send_char_async(number_buf[i]);
   }
 }
 
@@ -67,24 +67,24 @@ void vkprintf(const char *format, va_list args) {
         } else if (specifier == 's') {
           const char* str = va_arg(args, const char*);
           if (str != nullptr) {
-            UART::pl011_send_str_sync(str);
+            UART::pl011_send_str_async(str);
           } else {
-            UART::pl011_send_str_sync("(null)");
+            UART::pl011_send_str_async("(null)");
           }
         } else if (specifier == 'p') {
           const void* number = va_arg(args, void*);
-          UART::pl011_send_str_sync("0x");
+          UART::pl011_send_str_async("0x");
           kprintf_print_number((uint64_t)number, 16);
         } else if (specifier == 'c') {
           const int char_as_num = va_arg(args, int);
-          UART::pl011_send_char_sync((char)char_as_num);
+          UART::pl011_send_char_async((char)char_as_num);
         }
 
         current++;
       }
     } else {
       // Normal case, just send the character
-      UART::pl011_send_char_sync(*current);
+      UART::pl011_send_char_async(*current);
     }
 
     current++;
