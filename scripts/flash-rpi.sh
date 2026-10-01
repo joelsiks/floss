@@ -6,21 +6,23 @@
 SD_CARD_DEVICE=/dev/mmcblk0p1
 SD_CARD_MOUNT=/mnt/bootfs
 
+BUILD_DIR=build-rpi
+
 set -e
 set -x
 
 # Build the kernel
-cmake --build build
+cmake --build $BUILD_DIR
 
 # Copy from ELF to bin file
-aarch64-linux-gnu-objcopy -O binary build/floss_kernel build/floss_kernel.bin
+aarch64-linux-gnu-objcopy -O binary $BUILD_DIR/floss_kernel $BUILD_DIR/floss_kernel.bin
 
 # Mount SD card
 sudo mount $SD_CARD_DEVICE $SD_CARD_MOUNT
 
 # Update file
 rm $SD_CARD_MOUNT/kernel_2712.img
-cp build/floss_kernel.bin $SD_CARD_MOUNT/kernel_2712.img
+cp $BUILD_DIR/floss_kernel.bin $SD_CARD_MOUNT/kernel_2712.img
 sudo sync
 
 # Unmount SD card
