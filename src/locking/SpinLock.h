@@ -21,10 +21,10 @@ public:
 
 class SpinLockGuard {
 private:
-  SpinLock& _lock;
+  SpinLock* const _lock;
 
 public:
-  SpinLockGuard(SpinLock& lock);
+  SpinLockGuard(SpinLock* lock);
   ~SpinLockGuard();
 };
 

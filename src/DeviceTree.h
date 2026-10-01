@@ -26,8 +26,8 @@ namespace DeviceTree {
 
   class Interrupts {
   public:
-    // More than four intids are ever (rarely?) needed
-    static const uint32_t Capacity = 4;
+    // More than five intids are ever (rarely?) needed
+    static const uint32_t Capacity = 5;
 
   private:
     uint32_t _num_intids = 0;

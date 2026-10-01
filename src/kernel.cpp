@@ -16,7 +16,7 @@ extern "C" void secondary_kern_main() {
   const uint64_t cpu_id = CPU::id();
 
   {
-    SpinLockGuard guard(_print_lock);
+    SpinLockGuard guard(&_print_lock);
     kprintf("Running core %d\n", cpu_id);
   }
 

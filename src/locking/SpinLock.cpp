@@ -43,11 +43,11 @@ void SpinLock::unlock() {
   );
 }
 
-SpinLockGuard::SpinLockGuard(SpinLock& lock)
+SpinLockGuard::SpinLockGuard(SpinLock* lock)
   : _lock(lock) {
-  _lock.lock();
+  _lock->lock();
 }
 
 SpinLockGuard::~SpinLockGuard() {
-  _lock.unlock();
+  _lock->unlock();
 }

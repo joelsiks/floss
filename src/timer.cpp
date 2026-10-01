@@ -6,7 +6,6 @@
 
 #include "util/assert.h"
 
-
 static DeviceTree::Interrupts _timer_interrupts;
 
 void Timer::dt_parse(const DeviceTree::NodeFrame* node_frame) {

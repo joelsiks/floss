@@ -92,6 +92,15 @@ static const uint64_t EC_UDF_INS = 0;
 // debug-related exceptions
 static const uint64_t EC_DATA_ABRT = 37; // 0b100101;
 
+static const char* ec_to_string(uint64_t exception_class) {
+  switch (exception_class) {
+    case EC_DATA_ABRT:
+      return "Data Abort";
+    default:
+      return "Unknown";
+  }
+}
+
 extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   uint64_t exception_syndrome = 0;
   asm ("mrs %0, ESR_EL1" : "=r" (exception_syndrome));
@@ -106,7 +115,8 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
                       exception_class == EC_DATA_ABRT;
 
   kprintf("\nGot an exception (from %p)\n", exception_link);
-  kprintf("- The EC is: %d\n", exception_class);
+  kprintf("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
+  kprintf("- Syndrome is %p\n", exception_syndrome);
 
   frame_ptr->print_frame();
 
