@@ -4,14 +4,22 @@
 #include "exception.h"
 #include "interrupts/gic.h"
 #include "kstdio.h"
+#include "locking/SpinLock.h"
 #include "memory/map.h"
 #include "memory/mmu.h"
 #include "timer.h"
 #include "uart.h"
 
+static SpinLock _print_lock;
+
 extern "C" void secondary_kern_main() {
   const uint64_t cpu_id = CPU::id();
-  kprintf("Running core %d\n", cpu_id);
+
+  {
+    SpinLockGuard guard(_print_lock);
+    kprintf("Running core %d\n", cpu_id);
+  }
+
   GIC::driver()->initialize_core_specific();
   MMU::setup_core_specific();
   Exception::unmask_irqs();

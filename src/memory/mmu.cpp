@@ -45,6 +45,7 @@ static const uint64_t MAIR_DEVICE_NGNRNE = 0x00;
 
 // Normal Memory. Outer+Inner Write-Back, Outer+Inner Read+Write Allocate, Non-Transient
 // The read+write allocate means that a cache line is allocated on a read/write miss
+// We need this to be architecturally guaranteed that atomic instructions are atomic (!)
 static const uint64_t MAIR_NORMAL_WB = 0xFF;
 
 static const uint64_t MAIR_INDEX_DEVICE = 0;

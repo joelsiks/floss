@@ -52,7 +52,7 @@ static void toggle_timer(bool on) {
    "mov   x0, %0           \n\t\
     msr   CNTP_CTL_EL0, x0 \n\t\
     "
-    : : "r"(value) : "memory"
+    :: "r"(value) : "memory"
   );
 }
 
@@ -68,6 +68,7 @@ void Timer::set_timer() {
   asm volatile(
    "mrs   x0, CNTFRQ_EL0    \n\t\
     msr   CNTP_TVAL_EL0, x0 \n\t\
-    " ::: "memory"
+    "
+    ::: "memory"
   );
 }

@@ -30,7 +30,7 @@ namespace UART {
 
   class CharBuffer {
   private:
-    static const uint8_t BufferSize = 128;
+    static const uint8_t BufferSize = 64;
     uint8_t _start;
     uint8_t _end;
     char    _ring_buffer[BufferSize];
