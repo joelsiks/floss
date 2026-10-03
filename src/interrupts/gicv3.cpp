@@ -134,8 +134,6 @@ void GIC::DriverV3::initialize_gic_redistributors() {
   }
 
   NumRedistributors = current_redistributor + 1;
-
-  kprintf("GICv3: Num redistributors: %d\n", NumRedistributors);
 }
 
 void GIC::DriverV3::enable_cpu_interface() {
@@ -293,6 +291,7 @@ void GIC::DriverV3::set_gicr_base(uintptr_t base) {
 //      Must be done by each PE themself
 
 void GIC::DriverV3::initialize() {
+  kprintf("Using GICv3 driver\n");
   initialize_gic_distributor();
   initialize_gic_redistributors();
 }
