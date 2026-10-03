@@ -45,6 +45,11 @@ static const uint64_t MAIR_DEVICE_NGNRNE = 0x00;
 
 // Normal Memory. Outer+Inner Write-Back, Outer+Inner Read+Write Allocate, Non-Transient
 // The read+write allocate means that a cache line is allocated on a read/write miss
+//
+// Encoding is: 0booooiiii
+// For 'o' bits all one: Normal memory, Outer Write-Back Non-transient, Read Allocate, Write Allocate
+// For 'i' bits all one: Normal memory, Inner Write-Back Non-transient, Read Allocate, Write Allocate
+//
 // We need this to be architecturally guaranteed that atomic instructions are atomic (!)
 static const uint64_t MAIR_NORMAL_WB = 0xFF;
 
@@ -173,6 +178,7 @@ static bool pte_is_valid(const PageTableEntry& pte) {
 
 static const uint64_t PTE_LA_AP_RW_EL1 = 0b00 << 6; // PrivRead, PrivWrite
 static const uint64_t PTE_LA_SH_NONE = 0b00 << 8;
+static const uint64_t PTE_LA_SH_OUTER = 0b10 << 8;
 static const uint64_t PTE_LA_SH_INNER = 0b11 << 8;
 
 // The AF in a Block descriptor and Page descriptor indicates one of the following:
@@ -299,15 +305,12 @@ static void map_device_region(const Memory::Region* region) {
 void MMU::setup_idmap_page_tables() {
   Memory::validate_device_regions();
 
-  // 1. Start by inserting the MAIR values
-  setup_mair_ranges();
-
-  // 2. Start by setting up the single L0 page table entry by marking it as a Table
+  // 1. Start by setting up the single L0 page table entry by marking it as a Table
   // Descriptor type entry. Then point it to the next level (L1 PTE).
   pte_mark_as_table_descriptor(L0_ID_PAGE_TABLE, 0);
   pte_point_to_next_level(L0_ID_PAGE_TABLE, 0, L1_ID_PAGE_TABLE);
 
-  // 3. Map all RAM as Normal
+  // 2. Map all RAM as Normal
   Memory::RegionList* ram_regions = Memory::ram_regions();
 
   // Each RAM region might not be an integer multiple of 1GB, but maybe 2MB or
@@ -360,7 +363,7 @@ void MMU::setup_idmap_page_tables() {
     }
   }
 
-  // 4. Map Device regions as Device
+  // 3. Map Device regions as Device
   Memory::RegionList* device_regions = Memory::device_regions();
 
   for (uint32_t i = 0; i < device_regions->_num_regions; i++) {
@@ -400,7 +403,7 @@ void MMU::setup_translation_control() {
   //                   0b01 64KB
   //                   0b10 16KB
   // Bits [21:16] T1SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR1_EL1
-  // Bit  [22]    A1: Selects whether TTBR0_EL1 or TTBR1_EL1 defines the ASID. The encoding of this bit is:
+  // Bit  [22]    A1: Selects whether TTBR0_EL1 or TTBR1_EL1 defines the Address Space ID (ASID). The encoding of this bit is:
   //                  0b0 TTBR0_EL1.ASID defines the ASID
   //                  0b1 TTBR1_EL1.ASID defines the ASID
   // Bit  [23]    EPD1: This bit controls whether a translation table walk is performed
@@ -456,6 +459,8 @@ void MMU::enable() {
 }
 
 void MMU::setup_core_specific() {
+  setup_mair_ranges();
+
   set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
 
   setup_translation_control();

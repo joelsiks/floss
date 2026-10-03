@@ -15,17 +15,17 @@ static SpinLock _print_lock;
 extern "C" void secondary_kern_main() {
   const uint64_t cpu_id = CPU::id();
 
-  {
-    SpinLockGuard guard(&_print_lock);
-    kprintf("Running core %d\n", cpu_id);
-  }
-
   GIC::driver()->initialize_core_specific();
   MMU::setup_core_specific();
   Exception::unmask_irqs();
 
   // Signal that IRQs for RX and TX is ready for at least one core
   UART::signal_irqs_ready();
+
+  {
+    SpinLockGuard guard(&_print_lock);
+    kprintf("Running core %d\n", cpu_id);
+  }
 }
 
 extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
