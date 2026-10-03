@@ -46,6 +46,18 @@ SECTIONS
         __bss_end = .;
     }
 
+    /* C++ global constructors. KEEP prevents --gc-sections from dropping them
+     * We might want to add support for SORT_BY_INIT_PRIORITY in the future, to
+     * honor __attribute__((init_priority(...))).
+     */
+    .init_array : {
+        . = ALIGN(8);
+        __init_array_start = .;
+        KEEP(*(.init_array.*))
+        KEEP(*(.init_array))
+        __init_array_end = .;
+    }
+
     . = ALIGN(16);
     __stacks_bottom = .;
     . += STACK_SIZE * NCPUS;

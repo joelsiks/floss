@@ -7,7 +7,7 @@
 #  Entrypoint for the boot CPU (CPU 0)
 _start:
   # Stash away the pointer to the FDT, which arrives in x0 from the bootloader
-  mov   x18, x0
+  mov   x19, x0
 
   # Maybe drop from EL2 to EL1
   bl    drop_el2_to_el1
@@ -21,6 +21,11 @@ _start:
 
   bl    setup_stack
 
+  # Link the VBAR (Vector Base Address Register)
+  ldr   x0, =vector_table
+  msr   VBAR_EL1, x0
+  isb
+
   # Zero-initialize the bss section (holding uninitialized globals)
   ldr   x0, =__bss_start
   ldr   x1, =__bss_end
@@ -32,13 +37,20 @@ _start:
   .Lclear_bss_done:
   dsb   sy
 
-  # Link the VBAR (Vector Base Address Register)
-  ldr   x0, =vector_table
-  msr   VBAR_EL1, x0
-  isb
+  # Call global constructors (.init_array). Must be done after .bss zero initialization
+  ldr   x20, =__init_array_start
+  ldr   x21, =__init_array_end
+  .Linit_array_call:
+  cmp   x20, x21
+  b.hs  .Linit_array_call_done
+  ldr   x0, [x20]
+  blr   x0
+  add   x20, x20, #8
+  b     .Linit_array_call
+  .Linit_array_call_done:
 
   # Restore the stashed FDT pointer and enter the kernel
-  mov   x0, x18
+  mov   x0, x19
   bl    kern_main
   b     park
 
