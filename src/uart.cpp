@@ -109,11 +109,11 @@ static void calculate_divisors(uint32_t& integer, uint32_t& fractional) {
 static const uint32_t FR_TXFF = 1 << 5;
 static const uint32_t FR_RXFE = 1 << 4;
 
-static void pl011_wait_poll_tx_complete() {
+[[maybe_unused]] static void pl011_wait_poll_tx_complete() {
   while ((uart->FR & FR_TXFF) != 0) { }
 }
 
-static void pl011_wait_poll_rx_complete() {
+[[maybe_unused]] static void pl011_wait_poll_rx_complete() {
   while ((uart->FR & FR_RXFE) != 0) { }
 }
 
@@ -182,45 +182,6 @@ void UART::pl011_toggle_tx_interrupts(bool on) {
 
 void UART::pl011_toggle_rx_interrupts(bool on) {
   toggle_imsc_mask(on, IMSC_RXIM_BIT);
-}
-
-char UART::pl011_recv_sync() {
-  pl011_toggle_rx_interrupts(false);
-  pl011_wait_poll_rx_complete();
-  char c = uart->DR;
-  pl011_toggle_rx_interrupts(true);
-  return c;
-}
-
-
-void UART::pl011_send_char_sync(char c) {
-  pl011_wait_poll_tx_complete();
-
-  if (c == '\n') {
-    uart->DR = (uint32_t)'\r';
-    pl011_wait_poll_tx_complete();
-  }
-
-  uart->DR = c;
-  pl011_wait_poll_tx_complete();
-}
-
-void UART::pl011_send_str_sync(const char* str) {
-  pl011_wait_poll_tx_complete();
-
-  const char* current = str;
-  while (*current != '\0') {
-    const char c = *current;
-    if (c == '\n') {
-      uart->DR = (uint32_t)'\r';
-      pl011_wait_poll_tx_complete();
-    }
-
-    uart->DR = c;
-    pl011_wait_poll_tx_complete();
-
-    current++;
-  }
 }
 
 static void pl011_drain_tx() {
@@ -298,12 +259,14 @@ void UART::pl011_handle_irq() {
   if (rx) {
     // We got here since the UART hardware sent an interrupt signaling that
     // there was data to read, so a plain read of DR here is OK
-    const char c = uart->DR;
-    _rx_buffer.buffer_char(c);
+    while ((uart->FR & FR_RXFE) == 0) {
+      _rx_buffer.buffer_char(uart->DR);
+    }
+
     _rx_buffer.print_buffer();
   }
 
-  uart->ICR = mis;
+  uart->ICR = mis & (MIS_TX | MIS_RX);
 }
 
 UART::CharBuffer::CharBuffer()
