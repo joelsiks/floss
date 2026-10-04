@@ -137,7 +137,7 @@ static void pte_set_mair_attr(PageTableEntry* table, uint64_t idx, uint32_t mair
 }
 
 static void pte_point_to_next_level(PageTableEntry* table, uint64_t idx, PageTableEntry* next_entry) {
-  kassert((~(0xFFFFFFFFFULL<< 12) & (uint64_t)next_entry) == 0, "bad bits are set");
+  kassert((~(0xFFFFFFFFFULL << 12) & (uint64_t)next_entry) == 0, "bad bits are set");
 
   // Next-level table address[47:m], with m = 12 for 4KB granule
   // So bit 47:12, 36 bits, are the address to the next level page table entry.
@@ -318,7 +318,7 @@ void MMU::setup_idmap_page_tables() {
   // map many 2MB entries, and if not, map many 4K entries.
   for (uint64_t i = 0; i < ram_regions->_num_regions; i++) {
     Memory::Region* region = &ram_regions->_regions[i];
-    kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
+    //kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
 
     if (region->_size % L1_ENTRY_SIZE == 0) {
       // Map as L1 Block descriptors
@@ -368,7 +368,7 @@ void MMU::setup_idmap_page_tables() {
 
   for (uint32_t i = 0; i < device_regions->_num_regions; i++) {
     const Memory::Region* d = &device_regions->_regions[i];
-    kprintf("Device region: [%p, %p), %p\n", d->_start, d->_start + d->_size, d->_size);
+    //kprintf("Device region: [%p, %p), %p\n", d->_start, d->_start + d->_size, d->_size);
     map_device_region(d);
   }
 
@@ -441,6 +441,9 @@ void MMU::setup_translation_control() {
 // MMU enable for EL1&0 stage 1 address translation
 static const uint64_t SCTLR_MMU_ENABLE = 1 << 0;
 
+// Stage 1 Cacheability control, for data accesses.
+static const uint64_t SCTLR_CACHEABILITY_ENABLE = 1 << 2;
+
 void MMU::enable() {
   // System Control Register (EL1)
   // We set SCTLR_EL1.M (MMU enable for EL1&0 stage 1 address translation)
@@ -449,12 +452,15 @@ void MMU::enable() {
   asm volatile(
    "mrs   %0, SCTLR_EL1 \n\t\
     orr   %0, %0, %1    \n\t\
+    orr   %0, %0, %2    \n\t\
     msr   SCTLR_EL1, %0 \n\t\
     tlbi  vmalle1       \n\t\
     dsb   sy            \n\t\
     isb                 \n\t\
     "
-    : "=&r"(temp) : "i"(SCTLR_MMU_ENABLE) : "memory"
+    : "=&r"(temp)
+    : "i"(SCTLR_CACHEABILITY_ENABLE), "i"(SCTLR_MMU_ENABLE)
+    : "memory"
   );
 }
 
@@ -466,4 +472,38 @@ void MMU::setup_core_specific() {
   setup_translation_control();
 
   enable();
+}
+
+uint64_t MMU::get_pte_for_address(uintptr_t address) {
+
+  uint32_t l1_idx = address / L1_ENTRY_SIZE;
+
+  const uint64_t l1_entry = L1_ID_PAGE_TABLE[l1_idx];
+  const uint64_t l1_type = l1_entry & 0b11;
+
+  if (l1_type == 0) {
+    return 0;
+  } else if (l1_type == PTE_BLOCK_TYPE) {
+    // If it is block type, we're done.
+    return l1_entry;
+  } else if (l1_type == PTE_TABLE_TYPE) {
+    // If it is table type, we go down a level
+
+    const uint64_t l2_entry = *(uint64_t*)(l1_entry & (0xFFFFFFFFF << 12));
+    const uint64_t l2_type = l2_entry & 0b11;
+    kprintf("Got L2 entry: %p\n", l2_entry);
+
+    if (l2_type == 0) {
+      return 0;
+    } else if (l2_type == PTE_BLOCK_TYPE) {
+      return l2_entry;
+    } else if (l2_type == PTE_TABLE_TYPE) {
+      const uint64_t l3_entry = *(uint64_t*)(l2_entry & (0xFFFFFFFFF << 12));
+      kprintf("Got L3 entry: %p\n", l3_entry);
+
+      return l3_entry;
+    }
+  }
+
+  return 0;
 }

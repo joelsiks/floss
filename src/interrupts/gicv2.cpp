@@ -56,26 +56,43 @@ static volatile uint32_t* cpu_interface(uintptr_t offset) {
 static const uint32_t GICD_CTLR_EnableGrp0 = 0b01;
 static const uint32_t GICD_CTLR_EnableGrp1 = 0b10;
 
+static const uint32_t GICD_CTLR_NS_EnableGrp1 = 0b01;
+static const uint32_t GICD_TYPER_SecurityExtn = 1 << 10;
+
 // GICC_CTLR bits
-static const uint32_t GICC_CTLR_Enable = 0b01;
+//static const uint32_t GICC_CTLR_Enable = 0b01;
 static const uint32_t GICC_CTLR_EnableGrp1 = 0b10;
 static const uint32_t GICC_CTLR_AckCtl = 0b100;
+static const uint32_t GICC_CTLR_NS_EnableGrp1 = 0b01;
 
 // GICD_TYPER: ITLinesNumber (bits[4:0]) gives the number of SPI register
 // blocks; the total number of supported INTIDs is 32 * (ITLinesNumber + 1).
 static const uint32_t GICD_TYPER_ITLinesNumber_Mask = 0x1F;
 
 static uint32_t NumInterrupts = 0;
+static bool SingleSecurityState = false;
+
+static uint32_t cpu_group1_enable_bit() {
+  // Enalbing Group 1 is different if the system has a single security state,
+  // as opposed to two security states.
+  return SingleSecurityState
+      ? GICC_CTLR_EnableGrp1 | GICC_CTLR_AckCtl
+      : GICC_CTLR_NS_EnableGrp1;
+}
 
 void GIC::DriverV2::initialize_gic_distributor() {
+  const uint32_t typer = *distributor(GICD_TYPER);
+  SingleSecurityState = (typer & GICD_TYPER_SecurityExtn) == 0;
+  kprintf("SST: %z\n", SingleSecurityState ? 1 : 0);
+
   // Disable the Distributor while we configure it.
-  *distributor(GICD_CTLR) = 0;
+  const uint32_t initial_ctlr = *distributor(GICD_CTLR);
+  *distributor(GICD_CTLR) = initial_ctlr & ~(GICD_CTLR_EnableGrp0 | GICD_CTLR_EnableGrp1);
 
   // Ensure write to GICD_CTLR has completed before continuing
   asm volatile("dsb sy" ::: "memory");
 
   // Discover the number of supported interrupt IDs.
-  uint32_t typer = *distributor(GICD_TYPER);
   uint32_t it_lines = typer & GICD_TYPER_ITLinesNumber_Mask;
   NumInterrupts = 32 * (it_lines + 1);
 
@@ -90,7 +107,9 @@ void GIC::DriverV2::initialize_gic_distributor() {
   asm volatile("dsb sy" ::: "memory");
 
   // Enable the Distributor for Group 1.
-  *distributor(GICD_CTLR) = GICD_CTLR_EnableGrp1;
+  *distributor(GICD_CTLR) = SingleSecurityState
+      ? GICD_CTLR_EnableGrp1
+      : GICD_CTLR_NS_EnableGrp1;
 
   // Ensure write to GICD_CTLR has completed before continuing
   asm volatile("dsb sy" ::: "memory");
@@ -99,7 +118,7 @@ void GIC::DriverV2::initialize_gic_distributor() {
 void GIC::DriverV2::enable_cpu_interface() {
   // GICC_CTLR controls the CPU Interface. Enable the interface itself; the
   // Group 1 forwarding is enabled separately by enable_cpu_interrupts().
-  *cpu_interface(GICC_CTLR) = GICC_CTLR_Enable;
+  *cpu_interface(GICC_CTLR) = cpu_group1_enable_bit();
   asm volatile("dsb sy" ::: "memory");
 }
 
@@ -107,7 +126,7 @@ void GIC::DriverV2::enable_cpu_interrupts() {
   // Enable forwarding of Group 1 interrupts to this PE. Read-Modify-Write so
   // the Enable bit set above is preserved.
   uint32_t ctlr = *cpu_interface(GICC_CTLR);
-  ctlr |= GICC_CTLR_EnableGrp1 | GICC_CTLR_AckCtl;
+  ctlr |= cpu_group1_enable_bit();
   *cpu_interface(GICC_CTLR) = ctlr;
   asm volatile("dsb sy" ::: "memory");
 }

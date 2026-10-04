@@ -14,6 +14,8 @@ namespace MMU {
   void enable();
 
   void setup_core_specific();
+
+  uint64_t get_pte_for_address(uintptr_t address);
 };
 
 #endif // INCLUDE_MMU
