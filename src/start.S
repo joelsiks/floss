@@ -12,13 +12,7 @@ _start:
   # Maybe drop from EL2 to EL1
   bl    drop_el2_to_el1
 
-  # Park all cores that aren't core 0 if they ever get in here. If cores are
-  # halted/turned off during startup, they are awoken to the _secondary_start
-  # function below, via PSCI CPU_ON or a SpinTable.
-  mrs   x0, MPIDR_EL1
-  and   x0, x0, #0xff
-  cbnz  x0, park
-
+  mov   x0, #0
   bl    setup_stack
 
   # Link the VBAR (Vector Base Address Register)
@@ -57,10 +51,10 @@ _start:
 # Entrypoint for secondary CPUs (CPU >0). Called from PSCI CPU_ON or SpinTable
 # enable methods.
 _secondary_start:
+  mov   x19, x0
   bl    drop_el2_to_el1
 
-  mrs   x0, MPIDR_EL1
-  and   x0, x0, #0xff
+  mov   x0, x19
   bl    setup_stack
 
   # Link the VBAR (Vector Base Address Register)
