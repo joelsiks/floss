@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "DeviceTree.h"
+#include "locking/SpinLock.h"
 
 namespace UART {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);
@@ -11,7 +12,9 @@ namespace UART {
   uint32_t intid();
 
   void initialize();
+
   void signal_irqs_ready();
+  void signal_locks_ready();
 
   void pl011_toggle_tx_interrupts(bool on);
   void pl011_toggle_rx_interrupts(bool on);
@@ -34,6 +37,7 @@ namespace UART {
     uint8_t _start;
     uint8_t _end;
     char    _ring_buffer[BufferSize];
+    mutable SpinLockIrqSave _lock;
 
   public:
     CharBuffer();

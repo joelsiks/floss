@@ -1,5 +1,6 @@
 
 #include "SpinLock.h"
+#include "exception.h"
 
 // The default SpinLock uses the exclusive operations ldaxr and stlxr to
 // load/store a flag to.
@@ -41,6 +42,20 @@ void SpinLock::unlock() {
      : "r"(&_lock)
      : "memory"
   );
+}
+
+void SpinLockIrqSave::lock() {
+  _saved_irq_masked = Exception::is_irqs_masked();
+  Exception::mask_irqs();
+  SpinLock::lock();
+}
+
+void SpinLockIrqSave::unlock() {
+  if (!_saved_irq_masked) {
+    Exception::unmask_irqs();
+  }
+
+  SpinLock::unlock();
 }
 
 SpinLockGuard::SpinLockGuard(SpinLock* lock)

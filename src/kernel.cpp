@@ -50,6 +50,8 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   // In QEMU >=v9.0.0, see: https://gitlab.com/qemu-project/qemu/-/commit/59754f85ed35cbd5f4bf2663ca2136c78d5b2413
   MMU::setup_idmap_page_tables();
 
+  UART::signal_locks_ready();
+
   Memory::init(fdt);
 
   const uint64_t el = Exception::exception_level();

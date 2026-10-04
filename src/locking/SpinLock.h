@@ -19,6 +19,17 @@ public:
   void unlock();
 };
 
+class SpinLockIrqSave : public SpinLock {
+private:
+  bool _saved_irq_masked{false};
+
+public:
+  SpinLockIrqSave() noexcept = default;
+
+  void lock();
+  void unlock();
+};
+
 class SpinLockGuard {
 private:
   SpinLock* const _lock;

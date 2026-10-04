@@ -1,7 +1,6 @@
 
 #include "exception.h"
 
-#include "cpu.h"
 #include "kstdio.h"
 #include "timer.h"
 #include "uart.h"
@@ -20,6 +19,12 @@ void Exception::mask_irqs() {
 
 void Exception::unmask_irqs() {
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
+}
+
+bool Exception::is_irqs_masked() {
+  uint64_t daif;
+  asm volatile("mrs %0, DAIF" : "=r"(daif) :: "memory");
+  return (daif & (1ULL << 7)) != 0;
 }
 
 // The ExceptionFrame contains the saved/dumped contents of the registers when
@@ -107,7 +112,6 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 
   const bool bad_ec = exception_class == EC_UDF_INS ||
                       exception_class == EC_DATA_ABRT;
-
 
   kprintf("\nGot an exception (from %p)\n", exception_link);
   kprintf("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));

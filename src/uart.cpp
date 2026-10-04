@@ -36,6 +36,7 @@ static UART::CharBuffer _rx_buffer;
 static UART::CharBuffer _tx_buffer;
 
 static bool _irqs_ready = false;
+static bool _locks_ready = false;
 
 void UART::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   for (uint32_t i = 0; i < node_frame->_nprops; i++) {
@@ -155,6 +156,10 @@ void UART::initialize() {
 
 void UART::signal_irqs_ready() {
   _irqs_ready = true;
+}
+
+void UART::signal_locks_ready() {
+  _locks_ready = true;
 }
 
 // Bits for the Interrupt Mask Set Clear register
@@ -289,56 +294,100 @@ UART::CharBuffer::CharBuffer()
 //
 
 void UART::CharBuffer::buffer_char(char c) {
-  _ring_buffer[_end] = c;
+  auto do_work = [&]() {
+    _ring_buffer[_end] = c;
 
-  // Increment end
-  _end = (_end + 1) % BufferSize;
+    // Increment end
+    _end = (_end + 1) % BufferSize;
 
-  if (_end == _start) {
-    // If we bumped _end so that it is now equal to _start, we "leak" an element
-    // by incrementing _start by one
-    _start = (_start + 1) % BufferSize;
+    if (_end == _start) {
+      // If we bumped _end so that it is now equal to _start, we "leak" an
+      // element by incrementing _start by one
+      _start = (_start + 1) % BufferSize;
+    }
+  };
+
+  if (_locks_ready) {
+    SpinLockGuard guard(&_lock);
+    do_work();
+  } else {
+    do_work();
   }
 }
 
 bool UART::CharBuffer::read_char(char& out_c) {
-  // If start and end are the same the ring buffer is empty
-  if (_start == _end) {
-    return false;
+  auto do_work = [&]() -> bool {
+    // If start and end are the same the ring buffer is empty
+    if (_start == _end) {
+      return false;
+    }
+
+    // Output the current element
+    out_c = _ring_buffer[_start];
+
+    // Increment the start by one
+    _start = (_start + 1) % BufferSize;
+
+    return true;
+  };
+
+  if (_locks_ready) {
+    SpinLockGuard guard(&_lock);
+    return do_work();
   }
-
-  // Output the current element
-  out_c = _ring_buffer[_start];
-
-  // Increment the start by one
-  _start = (_start + 1) % BufferSize;
-
-  return true;
+  return do_work();
 }
 
 uint8_t UART::CharBuffer::elements_in_buffer() const {
-  if (_start == _end) {
-    return 0;
-  } else if (_start < _end) {
-    return _start - _end;
-  } else {
-    return BufferSize - _start + _end + 1;
+  auto do_work = [&]() -> uint8_t {
+    if (_start == _end) {
+      return 0;
+    } else if (_start < _end) {
+      return _end - _start;
+    } else {
+      return BufferSize - _start + _end;
+    }
+  };
+
+  if (_locks_ready) {
+    SpinLockGuard guard(&_lock);
+    return do_work();
   }
+  return do_work();
 }
 
 void UART::CharBuffer::print_buffer() const {
-  // If start and end are the same the ring buffer is empty
-  if (_start == _end) {
+  char snapshot[BufferSize];
+  uint8_t count = 0;
+
+  auto snapshot_work = [&]() {
+    if (_start == _end) {
+      return;
+    }
+
+    uint8_t current = _start;
+    do {
+      snapshot[count++] = _ring_buffer[current];
+      current = (current + 1) % BufferSize;
+    } while (current != _end);
+  };
+
+  if (_locks_ready) {
+    SpinLockGuard guard(&_lock);
+    snapshot_work();
+  } else {
+    snapshot_work();
+  }
+
+  if (count == 0) {
     return;
   }
 
   UART::pl011_send_str_async("Ring buffer content: ");
 
-  uint8_t current = _start;
-  do {
-    UART::pl011_send_char_async(_ring_buffer[current]);
-    current = (current + 1) % BufferSize;
-  } while (current != _end);
+  for (uint8_t i = 0; i < count; i++) {
+    UART::pl011_send_char_async(snapshot[i]);
+  }
 
   UART::pl011_send_char_async('\n');
 }
