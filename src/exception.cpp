@@ -2,11 +2,9 @@
 #include "exception.h"
 
 #include "cpu.h"
-#include "interrupts/gic.h"
 #include "kstdio.h"
 #include "timer.h"
 #include "uart.h"
-#include "util/assert.h"
 
 uint64_t Exception::exception_level() {
   uint64_t el;
@@ -17,14 +15,10 @@ uint64_t Exception::exception_level() {
 }
 
 void Exception::mask_irqs() {
-  // DAIFSet/DAIFClr bits[3:0] map to F(0), I(1), A(2), D(3). We want the
-  // IRQ (I) bit, i.e. bit 1.
   asm volatile("msr DAIFSet, #0b0010" ::: "memory");
 }
 
 void Exception::unmask_irqs() {
-  // DAIFSet/DAIFClr bits[3:0] map to F(0), I(1), A(2), D(3). We want the
-  // IRQ (I) bit, i.e. bit 1.
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
 
@@ -114,6 +108,7 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   const bool bad_ec = exception_class == EC_UDF_INS ||
                       exception_class == EC_DATA_ABRT;
 
+
   kprintf("\nGot an exception (from %p)\n", exception_link);
   kprintf("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
   kprintf("- Syndrome is %p\n", exception_syndrome);
@@ -126,22 +121,17 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
 extern "C" uint32_t Exception::irq_handler(uint32_t intid, ExceptionFrame* frame_ptr) {
   (void)frame_ptr;
 
-  kprintf("IRQ INTID %d handled by %d\n", intid, CPU::id());
-
+  // Ignore spurious interrupt(s)
   if (intid == 1022 || intid == 1023) {
-    // Spurious interrupts
     return intid;
   }
 
   if (intid == 30) {
-    kprintf("[%z] Generic Timer Interrupt (INTID %d)\n", CPU::id(), intid);
     Timer::set_timer();
   } else if (intid == UART::intid()) {
     // The UART hardware has sent an interrupt signaling that there is input available to read from ...
     // The UART hardware has sent an interrupt signaling that there is room available to send character to ...
     UART::pl011_handle_irq();
-  } else {
-    kprintf("[%z] Unhandled interrupt with INTID: %d\n", CPU::id(), intid);
   }
 
   return intid;
