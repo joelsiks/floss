@@ -125,6 +125,10 @@ uint32_t CPU::num_cpus() {
 // Defined in start.S
 extern "C" void* _secondary_start;
 
+// Per-core spin-table trampolines (see start.S). Indexed by logical CPU id;
+// entry n loads x0 = n and branches to _secondary_start.
+extern "C" uint64_t _secondary_trampoline_table[];
+
 void CPU::boot_secondary_cores() {
   // Loop over all the secondary cores and boot them up, which are all cores
   // except the first one (id 0).
@@ -140,7 +144,7 @@ void CPU::boot_secondary_cores() {
         }
         break;
       case EnableMethod::SpinTable:
-        SpinTable::boot_core(info->_release_address, (uint64_t)&_secondary_start);
+        SpinTable::boot_core(info->_release_address, _secondary_trampoline_table[i]);
         break;
       case EnableMethod::Unknown:
         kpanic("CPU (%z) with unknown enable method\n", info->_reg);

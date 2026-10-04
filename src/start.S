@@ -65,6 +65,28 @@ _secondary_start:
   bl    secondary_kern_main
   b     park
 
+# Per-core trampolines for the spin-table boot method
+.macro secondary_trampoline n
+.p2align 3
+.global _secondary_trampoline_\n
+_secondary_trampoline_\n:
+  mov   x0, #\n
+  b     _secondary_start
+.endm
+
+secondary_trampoline 0
+secondary_trampoline 1
+secondary_trampoline 2
+secondary_trampoline 3
+
+.p2align 3
+.global _secondary_trampoline_table
+_secondary_trampoline_table:
+  .quad _secondary_trampoline_0
+  .quad _secondary_trampoline_1
+  .quad _secondary_trampoline_2
+  .quad _secondary_trampoline_3
+
 # Checks if the CPU is at EL2 and if so drops from EL2 to EL1
 drop_el2_to_el1:
   # Check the exception level the kernel boots into
