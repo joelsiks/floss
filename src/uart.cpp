@@ -196,6 +196,32 @@ static void pl011_drain_tx() {
   }
 }
 
+void UART::pl011_send_char_sync(char c) {
+  kprecond(uart != nullptr);
+
+  // Wait until there is room in the UART's TX FIFO, then write directly to
+  // the Data Register. This bypasses the ring buffer entirely and never
+  // relies on TX interrupts, so it is safe to use from contexts where IRQs
+  // are masked (e.g. a synchronous exception handler). We busy-wait on the
+  // Transmit FIFO Full flag.
+  while ((uart->FR & FR_TXFF) != 0) { }
+  uart->DR = (uint32_t)c;
+}
+
+void UART::pl011_send_str_sync(const char* str) {
+  kprecond(uart != nullptr);
+
+  const char* current = str;
+  while (*current != '\0') {
+    const char c = *current;
+    if (c == '\n') {
+      pl011_send_char_sync('\r');
+    }
+    pl011_send_char_sync(c);
+    current++;
+  }
+}
+
 void UART::pl011_send_char_async(const char c) {
   // Push character(s) to ring buffer
   if (c == '\n') {

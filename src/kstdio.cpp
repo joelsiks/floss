@@ -1,24 +1,23 @@
-
 #include "kstdio.h"
 
 #include <cstdarg>
 
 #include "uart.h"
 
-template <typename T>
-static void kprintf_print_number(T number, int base) {
+template <void(*SendChar)(char), void(*SendStr)(const char*)>
+static void kprintf_print_number(uint64_t number, int base, bool signed_int) {
   char number_buf[20];
 
   // Exit early if number is zero
   if (number == 0) {
-    UART::pl011_send_char_async('0');
+    SendChar('0');
     return;
   }
 
-  // Handle negative numbers
-  if (number < 0) {
-    UART::pl011_send_char_async('-');
-    number *= -1;
+  // Handle negative numbers (only meaningful for signed %d)
+  if (signed_int && (int64_t)number < 0) {
+    SendChar('-');
+    number = (uint64_t)(-(int64_t)number);
   }
 
   int max_idx = 0;
@@ -37,18 +36,12 @@ static void kprintf_print_number(T number, int base) {
   }
 
   for (int i = max_idx - 1; i >= 0; i--) {
-    UART::pl011_send_char_async(number_buf[i]);
+    SendChar(number_buf[i]);
   }
 }
 
-void kprintf(const char* format, ...) {
-  va_list args;
-  va_start(args, format);
-  vkprintf(format, args);
-  va_end(args);
-}
-
-void vkprintf(const char *format, va_list args) {
+template <void(*SendChar)(char), void(*SendStr)(const char*)>
+static void vkprintf_impl(const char* format, va_list args) {
   const char* current = format;
   while (*current != '\0') {
     // If we encounter a '%' and the next character is not the null-terminator,
@@ -60,33 +53,55 @@ void vkprintf(const char *format, va_list args) {
       if (specifier != '\0') {
         if (specifier == 'd') {
           const int number = va_arg(args, int);
-          kprintf_print_number(number, 10);
+          kprintf_print_number<SendChar, SendStr>((uint64_t)number, 10, true);
         } else if (specifier == 'z') {
           const uint64_t number = va_arg(args, uint64_t);
-          kprintf_print_number(number, 10);
+          kprintf_print_number<SendChar, SendStr>(number, 10, false);
         } else if (specifier == 's') {
           const char* str = va_arg(args, const char*);
           if (str != nullptr) {
-            UART::pl011_send_str_async(str);
+            SendStr(str);
           } else {
-            UART::pl011_send_str_async("(null)");
+            SendStr("(null)");
           }
         } else if (specifier == 'p') {
           const void* number = va_arg(args, void*);
-          UART::pl011_send_str_async("0x");
-          kprintf_print_number((uint64_t)number, 16);
+          SendStr("0x");
+          kprintf_print_number<SendChar, SendStr>((uint64_t)number, 16, false);
         } else if (specifier == 'c') {
           const int char_as_num = va_arg(args, int);
-          UART::pl011_send_char_async((char)char_as_num);
+          SendChar((char)char_as_num);
         }
 
         current++;
       }
     } else {
       // Normal case, just send the character
-      UART::pl011_send_char_async(*current);
+      SendChar(*current);
     }
 
     current++;
   }
+}
+
+void kprintf(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vkprintf(format, args);
+  va_end(args);
+}
+
+void vkprintf(const char *format, va_list args) {
+  vkprintf_impl<UART::pl011_send_char_async, UART::pl011_send_str_async>(format, args);
+}
+
+void kprintf_sync(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vkprintf_sync(format, args);
+  va_end(args);
+}
+
+void vkprintf_sync(const char* format, va_list args) {
+  vkprintf_impl<UART::pl011_send_char_sync, UART::pl011_send_str_sync>(format, args);
 }

@@ -54,29 +54,32 @@ struct ExceptionFrame {
   uint64_t xzr;
 
   void print_frame() {
-    kprintf("Register dump:\n");
-    kprintf("  x0:  %p\n", x0);
-    kprintf("  x1:  %p\n", x1);
-    kprintf("  x2:  %p\n", x2);
-    kprintf("  x3:  %p\n", x3);
-    kprintf("  x4:  %p\n", x4);
-    kprintf("  x5:  %p\n", x5);
-    kprintf("  x6:  %p\n", x6);
-    kprintf("  x7:  %p\n", x7);
-    kprintf("  x8:  %p\n", x8);
-    kprintf("  x9:  %p\n", x9);
-    kprintf("  x10: %p\n", x10);
-    kprintf("  x11: %p\n", x11);
-    kprintf("  x12: %p\n", x12);
-    kprintf("  x13: %p\n", x13);
-    kprintf("  x14: %p\n", x14);
-    kprintf("  x15: %p\n", x15);
-    kprintf("  x16: %p\n", x16);
-    kprintf("  x17: %p\n", x17);
-    kprintf("  x18: %p\n", x18);
-    kprintf("  x29: %p\n", x29);
-    kprintf("  x30: %p\n", x30);
-    kprintf("  xzr: %p\n", xzr);
+    // Dump synchronously: we may be in a context where IRQs are masked, so
+    // the async TX ring buffer would never get drained and the dump would be
+    // truncated/garbled. See kprintf_sync / UART::pl011_send_*_sync.
+    kprintf_sync("Register dump:\n");
+    kprintf_sync("  x0:  %p\n", x0);
+    kprintf_sync("  x1:  %p\n", x1);
+    kprintf_sync("  x2:  %p\n", x2);
+    kprintf_sync("  x3:  %p\n", x3);
+    kprintf_sync("  x4:  %p\n", x4);
+    kprintf_sync("  x5:  %p\n", x5);
+    kprintf_sync("  x6:  %p\n", x6);
+    kprintf_sync("  x7:  %p\n", x7);
+    kprintf_sync("  x8:  %p\n", x8);
+    kprintf_sync("  x9:  %p\n", x9);
+    kprintf_sync("  x10: %p\n", x10);
+    kprintf_sync("  x11: %p\n", x11);
+    kprintf_sync("  x12: %p\n", x12);
+    kprintf_sync("  x13: %p\n", x13);
+    kprintf_sync("  x14: %p\n", x14);
+    kprintf_sync("  x15: %p\n", x15);
+    kprintf_sync("  x16: %p\n", x16);
+    kprintf_sync("  x17: %p\n", x17);
+    kprintf_sync("  x18: %p\n", x18);
+    kprintf_sync("  x29: %p\n", x29);
+    kprintf_sync("  x30: %p\n", x30);
+    kprintf_sync("  xzr: %p\n", xzr);
   }
 };
 
@@ -113,9 +116,9 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   const bool bad_ec = exception_class == EC_UDF_INS ||
                       exception_class == EC_DATA_ABRT;
 
-  kprintf("\nGot an exception (from %p)\n", exception_link);
-  kprintf("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
-  kprintf("- Syndrome is %p\n", exception_syndrome);
+  kprintf_sync("\nGot an exception (from %p)\n", exception_link);
+  kprintf_sync("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
+  kprintf_sync("- Syndrome is %p\n", exception_syndrome);
 
   frame_ptr->print_frame();
 
