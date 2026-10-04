@@ -6,7 +6,8 @@
 namespace CPU {
   void dt_parse(const DeviceTree::NodeFrame* node_frame);
 
-  // Retrieves the cpu/core/PE id of the current core
+  // Retrieves the contiguous logical id of the current core by mapping its
+  // MPIDR_EL1 affinity to the corresponding device-tree CPU array entry.
   uint64_t id();
   void print_affinity();
 

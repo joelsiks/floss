@@ -84,9 +84,29 @@ static uint64_t read_mpidr_el1() {
   return mpidr;
 }
 
+static constexpr uint64_t MPIDR_AFFINITY_MASK =
+    (0xFFULL << 32) | // Aff3
+    (0xFFULL << 16) | // Aff2
+    (0xFFULL << 8)  | // Aff1
+    (0xFFULL << 0);   // Aff0
+
+static uint64_t mpidr_affinity(uint64_t mpidr) {
+  return mpidr & MPIDR_AFFINITY_MASK;
+}
+
 uint64_t CPU::id() {
-  const uint64_t mpidr = read_mpidr_el1();
-  return mpidr & 0xFF;
+  const uint64_t affinity = mpidr_affinity(read_mpidr_el1());
+
+  // Entries in CpuInformation are registered in the order they appear in the
+  // DT, so their array index is their logical CPU id
+  for (uint32_t i = 0; i < _num_cpus; i++) {
+    if (mpidr_affinity(_cpu_information[i]._reg) == affinity) {
+      return i;
+    }
+  }
+
+  kpanic("CPU with MPIDR affinity %p is not in the DT\n",
+         reinterpret_cast<void*>(affinity));
 }
 
 void CPU::print_affinity() {
