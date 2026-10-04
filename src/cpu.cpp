@@ -73,16 +73,29 @@ void CPU::dt_parse(const DeviceTree::NodeFrame* node_frame) {
   _num_cpus++;
 }
 
-uint64_t CPU::id() {
+static uint64_t read_mpidr_el1() {
   uint64_t mpidr;
   asm volatile(
    "mrs   %0, MPIDR_EL1   \n\t\
-    and   %0, %0, #0xff   \n\t\
     "
     : "=r"(mpidr) :: "memory"
   );
 
   return mpidr;
+}
+
+uint64_t CPU::id() {
+  const uint64_t mpidr = read_mpidr_el1();
+  return mpidr & 0xFF;
+}
+
+void CPU::print_affinity() {
+  const uint64_t mpidr = read_mpidr_el1();
+  kprintf("Aff3: %z, Aff2: %z, Aff1: %z, Aff0: %z\n",
+          (mpidr & (0xFFUL << 32)) >> 32,
+          (mpidr & (0xFF << 16)) >> 16,
+          (mpidr & (0xFF << 8)) >> 8,
+          mpidr & 0xFF);
 }
 
 uint32_t CPU::num_cpus() {

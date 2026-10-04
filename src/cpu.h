@@ -8,6 +8,7 @@ namespace CPU {
 
   // Retrieves the cpu/core/PE id of the current core
   uint64_t id();
+  void print_affinity();
 
   uint32_t num_cpus();
 
