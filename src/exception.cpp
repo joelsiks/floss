@@ -110,6 +110,9 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
   uint64_t exception_link = 0;
   asm ("mrs %0, ELR_EL1" : "=r" (exception_link));
 
+  uint64_t fault_address = 0;
+  asm ("mrs %0, FAR_EL1" : "=r" (fault_address));
+
   // The exception class holds what kind of exception has occurred
   const uint64_t exception_class = (exception_syndrome >> ESR_EL1_EC_SHIFT) & ESR_EL1_EC_BITS;
 
@@ -117,8 +120,9 @@ extern "C" bool Exception::exception_handler(ExceptionFrame* frame_ptr) {
                       exception_class == EC_DATA_ABRT;
 
   kprintf_sync("\nGot an exception (from %p)\n", exception_link);
-  kprintf_sync("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
   kprintf_sync("- Syndrome is %p\n", exception_syndrome);
+  kprintf_sync("- Fault Address is %p\n", fault_address);
+  kprintf_sync("- EC is %d (%s)\n", exception_class, ec_to_string(exception_class));
 
   frame_ptr->print_frame();
 

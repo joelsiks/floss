@@ -204,6 +204,12 @@ void UART::pl011_send_char_sync(char c) {
   // relies on TX interrupts, so it is safe to use from contexts where IRQs
   // are masked (e.g. a synchronous exception handler). We busy-wait on the
   // Transmit FIFO Full flag.
+
+  if (c == '\n') {
+    while ((uart->FR & FR_TXFF) != 0) { }
+    uart->DR = (uint32_t)'\r';
+  }
+
   while ((uart->FR & FR_TXFF) != 0) { }
   uart->DR = (uint32_t)c;
 }
@@ -213,11 +219,7 @@ void UART::pl011_send_str_sync(const char* str) {
 
   const char* current = str;
   while (*current != '\0') {
-    const char c = *current;
-    if (c == '\n') {
-      pl011_send_char_sync('\r');
-    }
-    pl011_send_char_sync(c);
+    pl011_send_char_sync(*current);
     current++;
   }
 }
