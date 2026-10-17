@@ -83,7 +83,7 @@ static uint32_t cpu_group1_enable_bit() {
 void GIC::DriverV2::initialize_gic_distributor() {
   const uint32_t typer = *distributor(GICD_TYPER);
   SingleSecurityState = (typer & GICD_TYPER_SecurityExtn) == 0;
-  kprintf("SST: %z\n", SingleSecurityState ? 1 : 0);
+  kprintf("SingleSecurityState: %z\n", SingleSecurityState ? 1 : 0);
 
   // Disable the Distributor while we configure it.
   const uint32_t initial_ctlr = *distributor(GICD_CTLR);

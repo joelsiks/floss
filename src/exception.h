@@ -14,7 +14,7 @@ namespace Exception {
   void mask_irqs();
   void unmask_irqs();
 
-  bool is_irqs_masked();
+  bool irqs_masked();
 
   // Handler routines. Entered via assembly in the VBAR table trampolines
   extern "C" bool exception_handler(ExceptionFrame* frame_ptr);

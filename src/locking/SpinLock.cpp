@@ -1,5 +1,6 @@
 
 #include "SpinLock.h"
+
 #include "exception.h"
 
 // The default SpinLock uses the exclusive operations ldaxr and stlxr to
@@ -35,7 +36,6 @@ void SpinLock::lock() {
 }
 
 void SpinLock::unlock() {
-  // TODO: In a debug build, assert/condition that the lock is actually held
   asm volatile(
     "stlr   wzr, [%0]"
      :
@@ -45,7 +45,7 @@ void SpinLock::unlock() {
 }
 
 void SpinLockIrqSave::lock() {
-  _saved_irq_masked = Exception::is_irqs_masked();
+  _saved_irq_masked = Exception::irqs_masked();
   Exception::mask_irqs();
   SpinLock::lock();
 }

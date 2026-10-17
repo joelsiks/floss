@@ -21,7 +21,7 @@ void Exception::unmask_irqs() {
   asm volatile("msr DAIFClr, #0b0010" ::: "memory");
 }
 
-bool Exception::is_irqs_masked() {
+bool Exception::irqs_masked() {
   uint64_t daif;
   asm volatile("mrs %0, DAIF" : "=r"(daif) :: "memory");
   return (daif & (1ULL << 7)) != 0;
