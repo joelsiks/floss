@@ -28,7 +28,9 @@ namespace Memory {
 
   void validate_device_regions();
 
-  void init(DeviceTree::FlattenedDeviceTree* fdt);
+  void initialize(DeviceTree::FlattenedDeviceTree* fdt);
+
+  void print_regions();
 };
 
 #endif // INCLUDE_MEMORY_MAP

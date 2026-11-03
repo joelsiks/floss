@@ -5,6 +5,7 @@
 #include "interrupts/gic.h"
 #include "kstdio.h"
 #include "locking/SpinLock.h"
+#include "memory/FrameAllocator.h"
 #include "memory/map.h"
 #include "memory/mmu.h"
 #include "timer.h"
@@ -52,7 +53,10 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   UART::signal_locks_ready();
 
-  Memory::init(fdt);
+  Memory::initialize(fdt);
+  Memory::FrameAllocator::initialize();
+
+  Memory::print_regions();
 
   const uint64_t el = Exception::exception_level();
   kprintf("Kernel running at exception level: %d\n", el);

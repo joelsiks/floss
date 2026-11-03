@@ -3,6 +3,7 @@
 
 #include <cstring>
 
+#include "kstdio.h"
 #include "util/assert.h"
 
 extern "C" char _start[];       // start of kernel image
@@ -95,7 +96,7 @@ void Memory::validate_device_regions() {
  }
 }
 
-void Memory::init(DeviceTree::FlattenedDeviceTree* fdt) {
+void Memory::initialize(DeviceTree::FlattenedDeviceTree* fdt) {
   // Reserve the bootloader "hole"
   const uint64_t kernel_start = (uint64_t)_start;
   for (uint64_t i = 0; i < _ram_regions._num_regions; i++) {
@@ -126,4 +127,27 @@ void Memory::init(DeviceTree::FlattenedDeviceTree* fdt) {
 
   // Reserve the Flattened Device Tree
   _reserved_regions.add_region((uint64_t)fdt, parser.totalsize());
+}
+
+void Memory::print_regions() {
+  kprintf("Reserved Regions:\n");
+  for (size_t i = 0; i < _reserved_regions._num_regions; i++) {
+    kprintf(" - [%p, %p)\n",
+            _reserved_regions._regions[i]._start,
+            _reserved_regions._regions[i]._start + _reserved_regions._regions[i]._size);
+  }
+
+  kprintf("RAM Regions:\n");
+  for (size_t i = 0; i < _ram_regions._num_regions; i++) {
+    kprintf(" - [%p, %p)\n",
+            _ram_regions._regions[i]._start,
+            _ram_regions._regions[i]._start + _ram_regions._regions[i]._size);
+  }
+
+  kprintf("Device Regions:\n");
+  for (size_t i = 0; i < _device_regions._num_regions; i++) {
+    kprintf(" - [%p, %p)\n",
+            _device_regions._regions[i]._start,
+            _device_regions._regions[i]._start + _device_regions._regions[i]._size);
+  }
 }

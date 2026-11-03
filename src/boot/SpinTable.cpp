@@ -12,5 +12,6 @@ void SpinTable::boot_core(uint64_t spin_address, uint64_t entry_point_address) {
    "str %1, [%0] \n\t\
     dsb sy       \n\t\
     sev          \n\t\
-    " :: "r"(spin_address), "r"(entry_point_address) : "memory");
+    "
+    :: "r"(spin_address), "r"(entry_point_address) : "memory");
 }
