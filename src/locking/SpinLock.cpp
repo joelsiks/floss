@@ -51,11 +51,11 @@ void SpinLockIrqSave::lock() {
 }
 
 void SpinLockIrqSave::unlock() {
+  SpinLock::unlock();
+
   if (!_saved_irq_masked) {
     Exception::unmask_irqs();
   }
-
-  SpinLock::unlock();
 }
 
 SpinLockGuard::SpinLockGuard(SpinLock* lock)

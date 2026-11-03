@@ -4,7 +4,6 @@
 #include <cstring>
 
 #include "util/assert.h"
-#include "kstdio.h"
 
 extern "C" char _start[];       // start of kernel image
 extern "C" char __kernel_end[]; // end of kernel image
