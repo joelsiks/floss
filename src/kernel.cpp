@@ -50,7 +50,7 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
   // kernel does aligned accesses.
   //
   // In QEMU >=v9.0.0, see: https://gitlab.com/qemu-project/qemu/-/commit/59754f85ed35cbd5f4bf2663ca2136c78d5b2413
-  MMU::setup_idmap_page_tables();
+  MMU::map_ram_identity();
 
   UART::signal_locks_ready();
 

@@ -111,6 +111,92 @@ void MMU::set_ttbr(uint64_t translation_table, TranslationRegime regime) {
   }
 }
 
+void MMU::setup_translation_control() {
+  // TCR_EL1 is the Translation Control Register. It configures stuff like:
+  //  - How many bits are used for virtual addressing
+  //  - The granule size/page size
+  //  - Shareability
+  //  - Whether TLB miss results in a translation fault or actual lookup
+
+  // Bits [5:0]   T0SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR0_EL1
+  // Bit  [7]     EPD0: This bit controls whether a translation table walk is performed
+  //                    on a TLB miss, for an address that is translated using TTBR0_EL1
+  //                    0 = walk on TLB miss, 1 = no walk (translation fault is generated)
+  // Bits [9:8]   IRGN0: Inner cacheability attribute for memory associated with translation table walks using TTBR0_EL1
+  // Bits [11:10] ORGN0: Outer cacheability attribute for memory associated with translation table walks using TTBR0_EL1
+  //                     0b00 Normal memory, Inner/Outer Non-cacheable
+  //                     0b01 Normal memory, Inner/Outer Write-Back Read-Allocate Write-Allocate Cacheable
+  //                     0b10 Normal memory, Inner/Outer Write-Through Read-Allocate No Write-Allocate Cacheable
+  //                     0b11 Normal memory, Inner/Outer Write-Back Read-Allocate No Write-Allocate Cacheable
+  // Bits [13:12] SH0: Shareability attribute for memory associated with translation table walks using TTBR0_EL1
+  //                   0b00 Non-shareable
+  //                   0b10 Outer Shareable
+  //                   0b11 Inner Shareable
+  // Bits [15:14] TG0: Granule size for the TTBR0_EL1
+  //                   0b00 4KB
+  //                   0b01 64KB
+  //                   0b10 16KB
+  // Bits [21:16] T1SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR1_EL1
+  // Bit  [22]    A1: Selects whether TTBR0_EL1 or TTBR1_EL1 defines the Address Space ID (ASID). The encoding of this bit is:
+  //                  0b0 TTBR0_EL1.ASID defines the ASID
+  //                  0b1 TTBR1_EL1.ASID defines the ASID
+  // Bit  [23]    EPD1: This bit controls whether a translation table walk is performed
+  //                    on a TLB miss, for an address that is translated using TTBR1_EL1
+  //                    0 = walk on TLB miss, 1 = no walk (translation fault is generated)
+  // Bits [25:24] IRGN1
+  // Bits [27:26] ORGN1
+  // Bits [29:28] SH1
+  // Bits [31:30] TG1
+  // Bits [34:32] IPS: Intermediate Physical Address Size
+  //                   0b101 48 bits, 256TB
+  // Bit  [36]    AS: ASID Size. 0 = 8-bit, 1 = 16-bit
+  // Bit  [37]    TBI0: Top Byte ignored Indicates whether the top byte of an address is used for address match for the
+  //                    TTBR0_EL1 region, or ignored and used for tagged addresses.
+  //                    0b0 Top Byte used in the address calculation
+  //                    0b1 Top Byte ignored in the address calculation
+  // Bit  [38]    TBI1: =/=, ut for TTBR1_EL1
+  const uint64_t tcr_value =
+    0b010000 << 0  | // T0SZ
+    0b01     << 8  | // IRGN0
+    0b01     << 10 | // ORGN0
+    0b11     << 12 | // SH0
+    0b010000 << 16 | // T1SZ
+    0b101ULL << 32;  // IPS
+
+  asm volatile(
+   "msr   TCR_EL1, %0 \n\t\
+    isb               \n\t\
+    "
+    :: "r"(tcr_value) : "memory"
+  );
+}
+
+// MMU enable for EL1&0 stage 1 address translation
+static const uint64_t SCTLR_MMU_ENABLE = 1 << 0;
+
+// Stage 1 Cacheability control, for data accesses.
+static const uint64_t SCTLR_CACHEABILITY_ENABLE = 1 << 2;
+
+void MMU::enable() {
+  // System Control Register (EL1)
+  // We set SCTLR_EL1.M (MMU enable for EL1&0 stage 1 address translation)
+
+  uint64_t temp;
+  asm volatile(
+   "mrs   %0, SCTLR_EL1 \n\t\
+    orr   %0, %0, %1    \n\t\
+    orr   %0, %0, %2    \n\t\
+    msr   SCTLR_EL1, %0 \n\t\
+    tlbi  vmalle1       \n\t\
+    dsb   sy            \n\t\
+    isb                 \n\t\
+    "
+    : "=&r"(temp)
+    : "i"(SCTLR_CACHEABILITY_ENABLE), "i"(SCTLR_MMU_ENABLE)
+    : "memory"
+  );
+}
+
 typedef uint64_t PageTableEntry;
 
 alignas(4096) static PageTableEntry L0_ID_PAGE_TABLE[1];  // 512GB
@@ -120,6 +206,16 @@ alignas(4096) static PageTableEntry L2_ID_PAGE_TABLE[512 * 512]; // 512GB
 static const uint32_t MaxNumL3PageTables = 32;
 alignas(4096) static PageTableEntry L3_ID_PAGE_TABLES[MaxNumL3PageTables][512];
 static uint32_t _num_l3_page_tables = 0;
+
+void MMU::setup_core_specific() {
+  setup_mair_ranges();
+
+  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), TranslationRegime::Lower);
+
+  setup_translation_control();
+
+  enable();
+}
 
 static PageTableEntry* allocate_l3_page_table() {
   kassert(_num_l3_page_tables < MaxNumL3PageTables,
@@ -304,7 +400,7 @@ static void map_device_region(const Memory::Region* region) {
   }
 }
 
-void MMU::setup_idmap_page_tables() {
+void MMU::map_ram_identity() {
   Memory::validate_device_regions();
 
   uint64_t highest_region = 0;
@@ -392,136 +488,6 @@ void MMU::setup_idmap_page_tables() {
   Memory::allocate_virtual_global(highest_region / L3_ENTRY_SIZE);
 }
 
-void MMU::setup_translation_control() {
-  // TCR_EL1 is the Translation Control Register. It configures stuff like:
-  //  - How many bits are used for virtual addressing
-  //  - The granule size/page size
-  //  - Shareability
-  //  - Whether TLB miss results in a translation fault or actual lookup
-
-  // Bits [5:0]   T0SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR0_EL1
-  // Bit  [7]     EPD0: This bit controls whether a translation table walk is performed
-  //                    on a TLB miss, for an address that is translated using TTBR0_EL1
-  //                    0 = walk on TLB miss, 1 = no walk (translation fault is generated)
-  // Bits [9:8]   IRGN0: Inner cacheability attribute for memory associated with translation table walks using TTBR0_EL1
-  // Bits [11:10] ORGN0: Outer cacheability attribute for memory associated with translation table walks using TTBR0_EL1
-  //                     0b00 Normal memory, Inner/Outer Non-cacheable
-  //                     0b01 Normal memory, Inner/Outer Write-Back Read-Allocate Write-Allocate Cacheable
-  //                     0b10 Normal memory, Inner/Outer Write-Through Read-Allocate No Write-Allocate Cacheable
-  //                     0b11 Normal memory, Inner/Outer Write-Back Read-Allocate No Write-Allocate Cacheable
-  // Bits [13:12] SH0: Shareability attribute for memory associated with translation table walks using TTBR0_EL1
-  //                   0b00 Non-shareable
-  //                   0b10 Outer Shareable
-  //                   0b11 Inner Shareable
-  // Bits [15:14] TG0: Granule size for the TTBR0_EL1
-  //                   0b00 4KB
-  //                   0b01 64KB
-  //                   0b10 16KB
-  // Bits [21:16] T1SZ: VA 2^(64 - T0SZ), size of the memory region addressed by TTBR1_EL1
-  // Bit  [22]    A1: Selects whether TTBR0_EL1 or TTBR1_EL1 defines the Address Space ID (ASID). The encoding of this bit is:
-  //                  0b0 TTBR0_EL1.ASID defines the ASID
-  //                  0b1 TTBR1_EL1.ASID defines the ASID
-  // Bit  [23]    EPD1: This bit controls whether a translation table walk is performed
-  //                    on a TLB miss, for an address that is translated using TTBR1_EL1
-  //                    0 = walk on TLB miss, 1 = no walk (translation fault is generated)
-  // Bits [25:24] IRGN1
-  // Bits [27:26] ORGN1
-  // Bits [29:28] SH1
-  // Bits [31:30] TG1
-  // Bits [34:32] IPS: Intermediate Physical Address Size
-  //                   0b101 48 bits, 256TB
-  // Bit  [36]    AS: ASID Size. 0 = 8-bit, 1 = 16-bit
-  // Bit  [37]    TBI0: Top Byte ignored Indicates whether the top byte of an address is used for address match for the
-  //                    TTBR0_EL1 region, or ignored and used for tagged addresses.
-  //                    0b0 Top Byte used in the address calculation
-  //                    0b1 Top Byte ignored in the address calculation
-  // Bit  [38]    TBI1: =/=, ut for TTBR1_EL1
-  const uint64_t tcr_value =
-    0b010000 << 0  | // T0SZ
-    0b01     << 8  | // IRGN0
-    0b01     << 10 | // ORGN0
-    0b11     << 12 | // SH0
-    0b010000 << 16 | // T1SZ
-    0b101ULL << 32;  // IPS
-
-  asm volatile(
-   "msr   TCR_EL1, %0 \n\t\
-    isb               \n\t\
-    "
-    :: "r"(tcr_value) : "memory"
-  );
-}
-
-// MMU enable for EL1&0 stage 1 address translation
-static const uint64_t SCTLR_MMU_ENABLE = 1 << 0;
-
-// Stage 1 Cacheability control, for data accesses.
-static const uint64_t SCTLR_CACHEABILITY_ENABLE = 1 << 2;
-
-void MMU::enable() {
-  // System Control Register (EL1)
-  // We set SCTLR_EL1.M (MMU enable for EL1&0 stage 1 address translation)
-
-  uint64_t temp;
-  asm volatile(
-   "mrs   %0, SCTLR_EL1 \n\t\
-    orr   %0, %0, %1    \n\t\
-    orr   %0, %0, %2    \n\t\
-    msr   SCTLR_EL1, %0 \n\t\
-    tlbi  vmalle1       \n\t\
-    dsb   sy            \n\t\
-    isb                 \n\t\
-    "
-    : "=&r"(temp)
-    : "i"(SCTLR_CACHEABILITY_ENABLE), "i"(SCTLR_MMU_ENABLE)
-    : "memory"
-  );
-}
-
-void MMU::setup_core_specific() {
-  setup_mair_ranges();
-
-  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), TranslationRegime::Lower);
-
-  setup_translation_control();
-
-  enable();
-}
-
-uint64_t MMU::get_pte_for_address(uintptr_t address) {
-
-  uint32_t l1_idx = address / L1_ENTRY_SIZE;
-
-  const uint64_t l1_entry = L1_ID_PAGE_TABLE[l1_idx];
-  const uint64_t l1_type = l1_entry & 0b11;
-
-  if (l1_type == 0) {
-    return 0;
-  } else if (l1_type == PTE_BLOCK_TYPE) {
-    // If it is block type, we're done.
-    return l1_entry;
-  } else if (l1_type == PTE_TABLE_TYPE) {
-    // If it is table type, we go down a level
-
-    const uint64_t l2_entry = *(uint64_t*)(l1_entry & (0xFFFFFFFFF << 12));
-    const uint64_t l2_type = l2_entry & 0b11;
-    kprintf("Got L2 entry: %p\n", l2_entry);
-
-    if (l2_type == 0) {
-      return 0;
-    } else if (l2_type == PTE_BLOCK_TYPE) {
-      return l2_entry;
-    } else if (l2_type == PTE_TABLE_TYPE) {
-      const uint64_t l3_entry = *(uint64_t*)(l2_entry & (0xFFFFFFFFF << 12));
-      kprintf("Got L3 entry: %p\n", l3_entry);
-
-      return l3_entry;
-    }
-  }
-
-  return 0;
-}
-
 bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
   const uint64_t virtual_address = reinterpret_cast<uint64_t>(virtual_page);
   if ((virtual_address % L3_ENTRY_SIZE) != 0 ||
@@ -564,3 +530,38 @@ bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
 
   return true;
 }
+
+uint64_t MMU::get_pte_for_address(uintptr_t address) {
+
+  uint32_t l1_idx = address / L1_ENTRY_SIZE;
+
+  const uint64_t l1_entry = L1_ID_PAGE_TABLE[l1_idx];
+  const uint64_t l1_type = l1_entry & 0b11;
+
+  if (l1_type == 0) {
+    return 0;
+  } else if (l1_type == PTE_BLOCK_TYPE) {
+    // If it is block type, we're done.
+    return l1_entry;
+  } else if (l1_type == PTE_TABLE_TYPE) {
+    // If it is table type, we go down a level
+
+    const uint64_t l2_entry = *(uint64_t*)(l1_entry & (0xFFFFFFFFF << 12));
+    const uint64_t l2_type = l2_entry & 0b11;
+    kprintf("Got L2 entry: %p\n", l2_entry);
+
+    if (l2_type == 0) {
+      return 0;
+    } else if (l2_type == PTE_BLOCK_TYPE) {
+      return l2_entry;
+    } else if (l2_type == PTE_TABLE_TYPE) {
+      const uint64_t l3_entry = *(uint64_t*)(l2_entry & (0xFFFFFFFFF << 12));
+      kprintf("Got L3 entry: %p\n", l3_entry);
+
+      return l3_entry;
+    }
+  }
+
+  return 0;
+}
+
