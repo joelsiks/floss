@@ -19,7 +19,7 @@
 
 struct BlockHeader {
   BlockHeader* _next;
-  uint64_t _size; // total size of the block, including this header
+  uint64_t _size;
 
   void* to_ptr() {
     return reinterpret_cast<void*>(reinterpret_cast<char*>(this) + sizeof(BlockHeader));
@@ -48,13 +48,22 @@ static bool grow_by_one_page() {
 
   // Allocate one virtual page
   void* const virtual_page = Memory::allocate_virtual_global(1);
-
-  // Map the virtual page to the physical frame
-  if (!MMU::map_page(physical_frame, virtual_page)) {
+  if (virtual_page == nullptr) {
+    // Free the physical frame if we fail to get a virtual page
+    Memory::FrameAllocator::free_frame(&physical_frame);
     return false;
   }
 
-  // Insert the new block in the free-list
+  // Map the virtual page to the physical frame
+  if (!MMU::map_page(physical_frame, virtual_page)) {
+    // Free the physical frame and virtual page if we fail to map
+    Memory::FrameAllocator::free_frame(&physical_frame);
+    Memory::free_virtual_global(virtual_page, 1);
+
+    return false;
+  }
+
+  // Mapping succeeded. Insert the new block in the free-list.
   BlockHeader* const new_block = reinterpret_cast<BlockHeader*>(virtual_page);
   new_block->_next = _free_list;
   new_block->_size = PAGE_SIZE - sizeof(BlockHeader);
@@ -69,7 +78,7 @@ void* kmalloc(uint64_t size) {
   }
 
   const uint64_t requested_size = align_up(size, MinBlockSize);
-  if (requested_size > PAGE_SIZE) {
+  if (requested_size > PAGE_SIZE - sizeof(BlockHeader)) {
     kassert(false, "Large kmalloc allocations are not supported yet...\n");
     return nullptr;
   }

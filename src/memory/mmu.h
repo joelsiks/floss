@@ -1,5 +1,5 @@
-#ifndef INCLUDE_MMU
-#define INCLUDE_MMU
+#ifndef INCLUDE_MEMORY_MMU
+#define INCLUDE_MEMORY_MMU
 
 #include <cstdint>
 
@@ -28,4 +28,4 @@ namespace MMU {
   bool map_page(Memory::Frame physical_frame,  void* virtual_page);
 };
 
-#endif // INCLUDE_MMU
+#endif // INCLUDE_MEMORY_MMU
