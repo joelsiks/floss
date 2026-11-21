@@ -16,4 +16,4 @@ constexpr inline T is_aligned(T value, T alignment) {
   return (value - (value & ~(alignment - 1))) == 0;
 }
 
-#endif //INCLUDE_UTIL_ALIGN
+#endif // INCLUDE_UTIL_ALIGN

@@ -19,4 +19,4 @@ inline T bits_clz(T value) {
   return lz;
 }
 
-#endif //INCLUDE_UTIL_BITS
+#endif // INCLUDE_UTIL_BITS

@@ -1,5 +1,5 @@
-#ifndef INCLUDE_GICV3
-#define INCLUDE_GICV3
+#ifndef INCLUDE_INTERRUPTS_GICV3
+#define INCLUDE_INTERRUPTS_GICV3
 
 #include <cstdint>
 
@@ -40,4 +40,4 @@ namespace GIC {
   };
 };
 
-#endif // INCLUDE_GICV3
+#endif // INCLUDE_INTERRUPTS_GICV3

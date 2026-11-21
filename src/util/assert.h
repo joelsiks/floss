@@ -21,4 +21,4 @@
 
 #define kShouldNotReachHere() kpanic("ShouldNotReachHere")
 
-#endif //INCLUDE_UTIL_ASSERT
+#endif // INCLUDE_UTIL_ASSERT

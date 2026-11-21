@@ -1,5 +1,5 @@
-#ifndef INCLUDE_GIC
-#define INCLUDE_GIC
+#ifndef INCLUDE_INTERRUPTS_GIC
+#define INCLUDE_INTERRUPTS_GIC
 
 #include <cstdint>
 
@@ -48,4 +48,4 @@ namespace GIC {
   extern "C" void end_of_interrupt(uint32_t id);
 };
 
-#endif // INCLUDE_GIC
+#endif // INCLUDE_INTERRUPTS_GIC
