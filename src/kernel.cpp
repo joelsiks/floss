@@ -6,6 +6,7 @@
 #include "kstdio.h"
 #include "locking/SpinLock.h"
 #include "memory/FrameAllocator.h"
+#include "memory/kmalloc.h"
 #include "memory/map.h"
 #include "memory/mmu.h"
 #include "timer.h"
@@ -75,4 +76,7 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   // Then spin up and boot all other cores, which will call secondary_kern_main as well
   CPU::boot_secondary_cores();
+
+  char* const ptr = reinterpret_cast<char*>(kmalloc(128));
+  kprintf("kmalloc'd: %p\n", ptr);
 }

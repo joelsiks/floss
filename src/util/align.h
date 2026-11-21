@@ -2,17 +2,17 @@
 #define INCLUDE_UTIL_ALIGN
 
 template <typename T>
-inline T align_up(T value, T alignment) {
+constexpr inline T align_up(T value, T alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
 template <typename T>
-inline T align_down(T value, T alignment) {
+constexpr inline T align_down(T value, T alignment) {
   return value & ~(alignment - 1);
 }
 
 template <typename T>
-inline T is_aligned(T value, T alignment) {
+constexpr inline T is_aligned(T value, T alignment) {
   return (value - (value & ~(alignment - 1))) == 0;
 }
 

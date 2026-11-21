@@ -1,24 +1,27 @@
 #ifndef INCLUDE_MEMORY_VIRTUALALLOCATOR
 #define INCLUDE_MEMORY_VIRTUALALLOCATOR
 
+#include "locking/SpinLock.h"
 #include <cstdint>
 
 namespace Memory {
 
   class VirtualAllocator {
   private:
-    uint8_t* _start;
-    uint8_t* _end;
+    void* _start;
+    uint64_t _size;
+    SpinLock _lock;
 
   public:
-    VirtualAllocator(uint8_t* start, uint8_t* end);
-    VirtualAllocator(uint8_t* end);
-    ~VirtualAllocator();
+    VirtualAllocator(void* start, uint64_t size);
+    VirtualAllocator(uint64_t size);
 
-    uint8_t* allocate(uint64_t pages);
-    void free(uint8_t* start, uint64_t pages);
+    void* allocate(uint64_t pages);
+    void free(void* start, uint64_t pages);
   };
 
+  void* allocate_virtual_global(uint64_t pages);
+  void free_virtual_global(void* start, uint64_t pages);
 };
 
 #endif // INCLUDE_MEMORY_VIRTUALALLOCATOR

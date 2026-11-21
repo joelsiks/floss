@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "memory/FrameAllocator.h"
+
 namespace MMU {
 
   enum class TranslationRegime {
@@ -22,6 +24,8 @@ namespace MMU {
   void setup_core_specific();
 
   uint64_t get_pte_for_address(uintptr_t address);
+
+  bool map_page(Memory::Frame physical_frame,  void* virtual_page);
 };
 
 #endif // INCLUDE_MMU

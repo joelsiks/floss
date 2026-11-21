@@ -4,35 +4,47 @@
 #include "util/assert.h"
 
 static constexpr uint64_t PAGE_SIZE = 4 * 1024;
+static constexpr uint64_t VIRTUAL_ADDRESS_SPACE_SIZE = 128ULL * 1024 * 1024 * 1024 * 1024; // 128  TB
 
-Memory::VirtualAllocator::VirtualAllocator(uint8_t* start, uint8_t* end)
+Memory::VirtualAllocator::VirtualAllocator(void* start, uint64_t size)
   : _start(start),
-    _end(end) {
-  kassert(is_aligned(uint64_t(start), PAGE_SIZE), "start is not aligned to the page size: %p\n", start);
-  kassert(is_aligned(uint64_t(end), PAGE_SIZE), "end is not aligned to the page size: %p\n", end);
+    _size(size),
+    _lock() {
+  kassert(is_aligned(reinterpret_cast<uint64_t>(start), PAGE_SIZE), "start is not aligned to the page size: %p\n", start);
+  kassert(is_aligned(size, PAGE_SIZE), "size is not aligned to the page size: %p\n", size);
 }
 
-Memory::VirtualAllocator::VirtualAllocator(uint8_t* end)
-  : _start(0),
-    _end(end) { }
+Memory::VirtualAllocator::VirtualAllocator(uint64_t size)
+  : Memory::VirtualAllocator(nullptr, size) {}
 
-  Memory::VirtualAllocator::~VirtualAllocator() {}
+void* Memory::VirtualAllocator::allocate(uint64_t pages) {
+  SpinLockGuard guard(&_lock);
 
-uint8_t* Memory::VirtualAllocator::allocate(uint64_t pages) {
-  uint8_t* const pages_start = _start;
+  void* const pages_start = _start;
   const uint64_t pages_bytes = pages * PAGE_SIZE;
 
-  if (_start + pages_bytes > _end) {
+  if (reinterpret_cast<uint64_t>(_start) + pages_bytes > _size) {
     return nullptr;
   }
 
-  _start += pages_bytes * PAGE_SIZE;
+  _start = reinterpret_cast<char*>(_start) + pages_bytes;
 
   return pages_start;
 }
 
-void Memory::VirtualAllocator::free(uint8_t* start, uint64_t pages) {
+void Memory::VirtualAllocator::free(void* start, uint64_t pages) {
+  SpinLockGuard guard(&_lock);
   (void)start;
   (void)pages;
   // TODO: Add a free-list for freeing, until this allocator has been redesigned
+}
+
+static Memory::VirtualAllocator _virtual_global(VIRTUAL_ADDRESS_SPACE_SIZE);
+
+void* Memory::allocate_virtual_global(uint64_t pages) {
+  return _virtual_global.allocate(pages);
+}
+
+void Memory::free_virtual_global(void* start, uint64_t pages) {
+  _virtual_global.free(start, pages);
 }

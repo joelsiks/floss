@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "memory/VirtualAllocator.h"
 #include "memory/map.h"
 #include "util/assert.h"
 #include "util/align.h"
@@ -122,7 +123,7 @@ static uint32_t _num_l3_page_tables = 0;
 
 static PageTableEntry* allocate_l3_page_table() {
   kassert(_num_l3_page_tables < MaxNumL3PageTables,
-          "Ran out of L3 page tables for device mappings\n");
+          "Ran out of L3 page table entries\n");
   PageTableEntry* table = L3_ID_PAGE_TABLES[_num_l3_page_tables];
   _num_l3_page_tables++;
   return table;
@@ -306,6 +307,8 @@ static void map_device_region(const Memory::Region* region) {
 void MMU::setup_idmap_page_tables() {
   Memory::validate_device_regions();
 
+  uint64_t highest_region = 0;
+
   // 1. Start by setting up the single L0 page table entry by marking it as a Table
   // Descriptor type entry. Then point it to the next level (L1 PTE).
   pte_mark_as_table_descriptor(L0_ID_PAGE_TABLE, 0);
@@ -320,6 +323,11 @@ void MMU::setup_idmap_page_tables() {
   for (uint64_t i = 0; i < ram_regions->_num_regions; i++) {
     Memory::Region* region = &ram_regions->_regions[i];
     kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
+
+    const uint64_t region_top = align_up(region->_start + region->_size, L3_ENTRY_SIZE);
+    if (region_top > highest_region) {
+      highest_region = region_top;
+    }
 
     if (region->_size % L1_ENTRY_SIZE == 0) {
       // Map as L1 Block descriptors
@@ -368,14 +376,20 @@ void MMU::setup_idmap_page_tables() {
   Memory::RegionList* device_regions = Memory::device_regions();
 
   for (uint32_t i = 0; i < device_regions->_num_regions; i++) {
-    const Memory::Region* d = &device_regions->_regions[i];
-    kprintf("Device region: [%p, %p), %p\n", d->_start, d->_start + d->_size, d->_size);
-    map_device_region(d);
+    const Memory::Region* region = &device_regions->_regions[i];
+    const uint64_t region_top = align_up(region->_start + region->_size, L3_ENTRY_SIZE);
+    if (region_top > highest_region) {
+      highest_region = region_top;
+    }
+
+    kprintf("Device region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
+    map_device_region(region);
   }
 
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
-
   setup_core_specific();
+
+  Memory::allocate_virtual_global(highest_region / L3_ENTRY_SIZE);
 }
 
 void MMU::setup_translation_control() {
@@ -506,4 +520,47 @@ uint64_t MMU::get_pte_for_address(uintptr_t address) {
   }
 
   return 0;
+}
+
+bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
+  const uint64_t virtual_address = reinterpret_cast<uint64_t>(virtual_page);
+  if ((virtual_address % L3_ENTRY_SIZE) != 0 ||
+      (physical_frame._address % L3_ENTRY_SIZE) != 0 ||
+      virtual_address >= (1ULL << NBITS_VAS)) {
+    return false;
+  }
+
+  const uint64_t l1_idx = virtual_address / L1_ENTRY_SIZE;
+  const uint64_t l2_idx = virtual_address / L2_ENTRY_SIZE;
+  const uint64_t l3_idx = (virtual_address % L2_ENTRY_SIZE) / L3_ENTRY_SIZE;
+
+  if ((L1_ID_PAGE_TABLE[l1_idx] & 0b11) == PTE_BLOCK_TYPE) {
+    return false;
+  }
+
+  ensure_l2_page_table(l1_idx);
+  PageTableEntry* l2_entry = table_entry(L2_ID_PAGE_TABLE, l2_idx);
+  PageTableEntry* l3_table;
+
+  if (pte_is_valid(*l2_entry)) {
+    if ((*l2_entry & 0b11) != PTE_TABLE_TYPE) {
+      return false;
+    }
+    l3_table = reinterpret_cast<PageTableEntry*>(*l2_entry & PTE_ADDR_MASK);
+  } else {
+    l3_table = allocate_l3_page_table();
+    *l2_entry = reinterpret_cast<uint64_t>(l3_table) | PTE_TABLE_TYPE;
+  }
+
+  PageTableEntry* entry = table_entry(l3_table, l3_idx);
+  if (pte_is_valid(*entry)) {
+    return false;
+  }
+
+  *entry = (physical_frame._address & PTE_ADDR_MASK) |
+           PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
+           PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
+           (MAIR_INDEX_NORMAL_WB << 2) | PTE_PAGE_TYPE;
+
+  return true;
 }
