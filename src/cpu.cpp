@@ -130,8 +130,8 @@ extern "C" void* _secondary_start;
 extern "C" uint64_t _secondary_trampoline_table[];
 
 void CPU::boot_secondary_cores() {
-  // Loop over all the secondary cores and boot them up, which are all cores
-  // except the first one (id 0).
+  // Loop over all the secondary cores (all cores except first one, id 0) and
+  // boot them up
   for (uint32_t i = 1; i < _num_cpus; i++) {
     const CpuInformation* info = &_cpu_information[i];
 

@@ -1,6 +1,7 @@
 
 #include "memory/FrameAllocator.h"
 
+#include "locking/SpinLock.h"
 #include "memory/map.h"
 #include "util/align.h"
 #include "util/assert.h"
@@ -15,6 +16,7 @@ static const uint64_t BitmapSize = NumFrames / BitsPerWord;
 
 // 0 means free, 1 means allocated
 static uint64_t _frame_bitmap[BitmapSize];
+static SpinLock _frame_bitmap_lock;
 
 struct BitRef {
   uint64_t* _word;
@@ -160,6 +162,8 @@ void Memory::FrameAllocator::initialize() {
 }
 
 bool Memory::FrameAllocator::allocate_frame(Memory::Frame* frame) {
+  SpinLockGuard guard(&_frame_bitmap_lock);
+
   // Initial implementation uses a first-fit algorithm, searching linearly from
   // low addresses until an available frame is found
 
@@ -207,6 +211,8 @@ bool Memory::FrameAllocator::allocate_frames_contiguous(uint64_t count, Memory::
 void Memory::FrameAllocator::free_frame(Memory::Frame* frame) {
   kprecond(frame != nullptr);
   kassert(frame->_address % FrameSize == 0, "Frame ptr %p is not aligned to FrameSize %d\n", frame->_address, FrameSize);
+
+  SpinLockGuard guard(&_frame_bitmap_lock);
 
   BitRef bit_ref = paddr_to_frame(frame->_address);
   const uint64_t mask = 1ULL << bit_ref._bit;

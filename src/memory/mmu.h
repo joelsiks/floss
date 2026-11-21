@@ -4,8 +4,14 @@
 #include <cstdint>
 
 namespace MMU {
+
+  enum class TranslationRegime {
+    Lower,
+    Upper
+  };
+
   void setup_mair_ranges();
-  void set_ttbr(uint64_t translation_table, uint32_t exception_level);
+  void set_ttbr(uint64_t translation_table, TranslationRegime regime);
 
   void setup_idmap_page_tables();
 

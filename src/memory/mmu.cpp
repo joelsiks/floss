@@ -78,34 +78,35 @@ void MMU::setup_mair_ranges() {
   configure_mair_range(MAIR_NORMAL_WB, MAIR_INDEX_NORMAL_WB);
 }
 
-void MMU::set_ttbr(uint64_t translation_table, uint32_t exception_level) {
-  // Translation Table Base Register (EL1) TTBR0_EL1, TTBR1_EL1
+void MMU::set_ttbr(uint64_t translation_table, TranslationRegime regime) {
+  // Translation Table Base Register (EL1) TTBR0_EL1, TTBR1_EL1.
   // 0 is supposed to be user-space (EL0), and 1 is supposed to be kernel-space (EL1),
   // but is gated by the upper 16 bits being either all 0s (TTRB0) or all 1s (TTBR1),
-  // not by exception level. Permission is configured differently.
+  // not by exception level. Permission is configured separately.
 
   // I don't think we need a strong dsb or tlbi variant here as we are setting
   // the TTBR register(s) for the first time right now to the identity map,
   // which should behave the same way as without the MMU/virtual memory enabled.
-  // If we were ever to update these in the future (context-switching processes,
-  // user-mode <-> kernel-mode), then we need to make sure that the system is
-  // coherent and views the transition as a whole.
-  if (exception_level == 0) {
-    asm volatile(
-     "msr   TTBR0_EL1, %0 \n\t\
-      isb                 \n\t\
-      "
-      :: "r"(translation_table) : "memory"
-    );
-  } else if (exception_level == 1) {
-    asm volatile(
-     "msr   TTBR1_EL1, %0 \n\t\
-      isb                 \n\t\
-      "
-      :: "r"(translation_table) : "memory"
-    );
-  } else {
-    kpanic("Invalid exception level: %d\n", exception_level);
+  // If we were ever to update these in the future (e.g., context-switching
+  // processes), then we need to make sure that the system is coherent and views
+  // the transition as a whole.
+  switch (regime) {
+    case TranslationRegime::Lower:
+      asm volatile(
+       "msr   TTBR0_EL1, %0 \n\t\
+        isb                 \n\t\
+        "
+        :: "r"(translation_table) : "memory"
+      );
+      break;
+    case TranslationRegime::Upper:
+      asm volatile(
+       "msr   TTBR1_EL1, %0 \n\t\
+        isb                 \n\t\
+        "
+        :: "r"(translation_table) : "memory"
+      );
+      break;
   }
 }
 
@@ -427,7 +428,6 @@ void MMU::setup_translation_control() {
     0b01     << 10 | // ORGN0
     0b11     << 12 | // SH0
     0b010000 << 16 | // T1SZ
-    0b0      << 23 | // EPD1
     0b101ULL << 32;  // IPS
 
   asm volatile(
