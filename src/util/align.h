@@ -11,4 +11,9 @@ inline T align_down(T value, T alignment) {
   return value & ~(alignment - 1);
 }
 
+template <typename T>
+inline T is_aligned(T value, T alignment) {
+  return (value - (value & ~(alignment - 1))) == 0;
+}
+
 #endif //INCLUDE_UTIL_ALIGN

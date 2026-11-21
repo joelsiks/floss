@@ -319,7 +319,7 @@ void MMU::setup_idmap_page_tables() {
   // map many 2MB entries, and if not, map many 4K entries.
   for (uint64_t i = 0; i < ram_regions->_num_regions; i++) {
     Memory::Region* region = &ram_regions->_regions[i];
-    //kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
+    kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
 
     if (region->_size % L1_ENTRY_SIZE == 0) {
       // Map as L1 Block descriptors
@@ -369,7 +369,7 @@ void MMU::setup_idmap_page_tables() {
 
   for (uint32_t i = 0; i < device_regions->_num_regions; i++) {
     const Memory::Region* d = &device_regions->_regions[i];
-    //kprintf("Device region: [%p, %p), %p\n", d->_start, d->_start + d->_size, d->_size);
+    kprintf("Device region: [%p, %p), %p\n", d->_start, d->_start + d->_size, d->_size);
     map_device_region(d);
   }
 
@@ -467,7 +467,7 @@ void MMU::enable() {
 void MMU::setup_core_specific() {
   setup_mair_ranges();
 
-  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), 0);
+  set_ttbr(reinterpret_cast<uint64_t>(L0_ID_PAGE_TABLE), TranslationRegime::Lower);
 
   setup_translation_control();
 
