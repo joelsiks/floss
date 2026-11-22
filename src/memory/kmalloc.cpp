@@ -47,7 +47,7 @@ static bool grow_by_one_page() {
   }
 
   // Allocate one virtual page
-  void* const virtual_page = Memory::allocate_virtual_global(1);
+  void* const virtual_page = Memory::kernel_virtual_alloc(1);
   if (virtual_page == nullptr) {
     // Free the physical frame if we fail to get a virtual page
     Memory::FrameAllocator::free_frame(&physical_frame);
@@ -58,7 +58,7 @@ static bool grow_by_one_page() {
   if (!MMU::map_page(physical_frame, virtual_page)) {
     // Free the physical frame and virtual page if we fail to map
     Memory::FrameAllocator::free_frame(&physical_frame);
-    Memory::free_virtual_global(virtual_page, 1);
+    Memory::kernel_virtual_free(virtual_page, 1);
 
     return false;
   }

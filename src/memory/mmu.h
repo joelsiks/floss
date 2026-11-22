@@ -44,6 +44,9 @@ constexpr uint64_t L3EntrySize = 1   << 12;
 
 constexpr uint64_t NBitsVAS = 48;
 
+typedef uint64_t PageTable;
+typedef uint64_t PageTableEntry;
+
 namespace MMU {
 
   enum class TranslationRegime {
@@ -58,6 +61,15 @@ namespace MMU {
   void set_ttbr(uint64_t translation_table, TranslationRegime regime);
 
   void setup_core_specific();
+
+  /*
+  allocate_page_table()
+  zero_page_table()
+  ensure_l0_entry()
+  ensure_l1_table()
+  ensure_l2_table()
+  ensure_l3_table()
+  */
 
   void map_ram_identity();
   bool map_page(Memory::Frame physical_frame,  void* virtual_page);
