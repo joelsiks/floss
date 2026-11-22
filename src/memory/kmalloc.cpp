@@ -8,10 +8,10 @@
 #include "util/assert.h"
 #include "mmu.h"
 
-// The kernel malloc will be a simple free-list allocator that uses a first-fit
-// approach to find suitable blocks. When the allocator is out of backing storage
-// it allocates a new physical frame and a virtual page and maps them, and then
-// enters it into the free-list, and retries the allocation.
+// The kernel malloc is a simple free-list allocator that uses a first-fit
+// approach to find suitable blocks. When the allocator is out of backing
+// storage, it allocates a new physical frame and a virtual page and maps them,
+// and then enters it into the free-list, and retries the allocation.
 //
 // The free-list is made up of "blocks". Each block has a BlockHeader that
 // immediately precedes the memory it is representing. The BlockHeader is

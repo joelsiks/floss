@@ -255,11 +255,6 @@ static void pte_point_to_offset(PageTableEntry* table, uint64_t idx, uint64_t of
   table[idx] |= (uint64_t)offset;
 }
 
-static const uint64_t L1_ENTRY_SIZE = 1 << 30;
-static const uint64_t L2_ENTRY_SIZE = 1 << 21;
-static const uint64_t L3_ENTRY_SIZE = 1 << 12;
-static const uint64_t NBITS_VAS = 48;
-
 // Type of Page Table Entry
 // Bit 0 indicates validity (1 = good, 0 = invalid), bit 1 indicates type:
 // L3:    1 = page descriptor,  0 = invalid
@@ -353,11 +348,11 @@ static PageTableEntry* ensure_l3_page_table(uint64_t l1_idx, uint64_t l2_idx) {
 }
 
 static void map_device_l2_block(uint64_t phys) {
-  kprecond((phys % L2_ENTRY_SIZE) == 0);
+  kprecond((phys % L2EntrySize) == 0);
 
-  const uint64_t l2_idx = phys / L2_ENTRY_SIZE;
+  const uint64_t l2_idx = phys / L2EntrySize;
 
-  ensure_l2_page_table(phys / L1_ENTRY_SIZE);
+  ensure_l2_page_table(phys / L1EntrySize);
 
   pte_mark_as_block_descriptor_device(L2_ID_PAGE_TABLE, l2_idx);
   pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, phys);
@@ -366,12 +361,12 @@ static void map_device_l2_block(uint64_t phys) {
 }
 
 static void map_device_l3_page(uint64_t phys) {
-  kprecond((phys % L3_ENTRY_SIZE) == 0);
+  kprecond((phys % L3EntrySize) == 0);
 
-  const uint64_t l2_idx = phys / L2_ENTRY_SIZE;
-  const uint64_t l3_idx = (phys % L2_ENTRY_SIZE) / L3_ENTRY_SIZE;
+  const uint64_t l2_idx = phys / L2EntrySize;
+  const uint64_t l3_idx = (phys % L2EntrySize) / L3EntrySize;
 
-  PageTableEntry* l3_table = ensure_l3_page_table(phys / L1_ENTRY_SIZE, l2_idx);
+  PageTableEntry* l3_table = ensure_l3_page_table(phys / L1EntrySize, l2_idx);
 
   pte_mark_as_page_descriptor_device(l3_table, l3_idx);
   pte_point_to_offset(l3_table, l3_idx, phys);
@@ -389,18 +384,18 @@ static void map_device_l3_page(uint64_t phys) {
 static void map_device_region(const Memory::Region* region) {
   // Device memory must be mapped at page granularity, so round the region
   // outwards to whole 4K pages.
-  const uint64_t start = align_down(region->_start, L3_ENTRY_SIZE);
-  const uint64_t end = align_up(region->_start + region->_size, L3_ENTRY_SIZE);
+  const uint64_t start = align_down(region->_start, L3EntrySize);
+  const uint64_t end = align_up(region->_start + region->_size, L3EntrySize);
 
   for (uint64_t addr = start; addr < end;) {
-    const bool use_block = (addr % L2_ENTRY_SIZE) == 0 && (end - addr) >= L2_ENTRY_SIZE;
+    const bool use_block = (addr % L2EntrySize) == 0 && (end - addr) >= L2EntrySize;
 
     if (use_block) {
       map_device_l2_block(addr);
-      addr += L2_ENTRY_SIZE;
+      addr += L2EntrySize;
     } else {
       map_device_l3_page(addr);
-      addr += L3_ENTRY_SIZE;
+      addr += L3EntrySize;
     }
   }
 }
@@ -425,32 +420,32 @@ void MMU::map_ram_identity() {
     Memory::Region* region = &ram_regions->_regions[i];
     kprintf("RAM region: [%p, %p), %p\n", region->_start, region->_start + region->_size, region->_size);
 
-    const uint64_t region_top = align_up(region->_start + region->_size, L3_ENTRY_SIZE);
+    const uint64_t region_top = align_up(region->_start + region->_size, L3EntrySize);
     if (region_top > highest_region) {
       highest_region = region_top;
     }
 
-    if (region->_size % L1_ENTRY_SIZE == 0) {
+    if (region->_size % L1EntrySize == 0) {
       // Map as L1 Block descriptors
 
-      const uint64_t ram_start_l1_idx = region->_start / L1_ENTRY_SIZE;
-      const uint64_t ram_l1_mappings = region->_size / L1_ENTRY_SIZE;
+      const uint64_t ram_start_l1_idx = region->_start / L1EntrySize;
+      const uint64_t ram_l1_mappings = region->_size / L1EntrySize;
       for (uint64_t i = 0; i < ram_l1_mappings; i++) {
         const uint64_t l1_idx = ram_start_l1_idx + i;
 
         // Normal WB identity mappings
         pte_mark_as_block_descriptor_normal(L1_ID_PAGE_TABLE, l1_idx);
-        pte_point_to_offset(L1_ID_PAGE_TABLE, l1_idx, l1_idx * L1_ENTRY_SIZE);
+        pte_point_to_offset(L1_ID_PAGE_TABLE, l1_idx, l1_idx * L1EntrySize);
         pte_set_mair_attr(L1_ID_PAGE_TABLE, l1_idx, MAIR_INDEX_NORMAL_WB);
         //kprintf("VMSA: Identity mapping Normal L1 [%p, %p)\n", l1_idx * L1_ENTRY_SIZE, (l1_idx + 1) * L1_ENTRY_SIZE);
       }
 
-    } else if (region->_size % L2_ENTRY_SIZE == 0) {
+    } else if (region->_size % L2EntrySize == 0) {
       // Map as L2 Block descriptors inside L1 Table descriptors
 
       // Map all L1 entries in the region as Table descriptors
-      const uint64_t start_l1_idx = region->_start / L1_ENTRY_SIZE;
-      const uint64_t l1_mappings = (region->_size + L1_ENTRY_SIZE - 1) / L1_ENTRY_SIZE;
+      const uint64_t start_l1_idx = region->_start / L1EntrySize;
+      const uint64_t l1_mappings = (region->_size + L1EntrySize - 1) / L1EntrySize;
       for (uint64_t i = 0; i < l1_mappings; i++) {
         const uint64_t l1_idx = start_l1_idx + i;
         pte_mark_as_table_descriptor(L1_ID_PAGE_TABLE, l1_idx);
@@ -458,18 +453,18 @@ void MMU::map_ram_identity() {
       }
 
       // Then map all L2 entries as Block descriptors
-      const uint64_t start_l2_idx = region->_start / L2_ENTRY_SIZE;
-      const uint64_t l2_mappings = region->_size / L2_ENTRY_SIZE;
+      const uint64_t start_l2_idx = region->_start / L2EntrySize;
+      const uint64_t l2_mappings = region->_size / L2EntrySize;
       for (uint64_t i = 0; i < l2_mappings; i++) {
         const uint64_t l2_idx = start_l2_idx + i;
         pte_mark_as_block_descriptor_normal(L2_ID_PAGE_TABLE, l2_idx);
-        pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, l2_idx * L2_ENTRY_SIZE);
+        pte_point_to_offset(L2_ID_PAGE_TABLE, l2_idx, l2_idx * L2EntrySize);
         pte_set_mair_attr(L2_ID_PAGE_TABLE, l2_idx, MAIR_INDEX_NORMAL_WB);
         //kprintf("VMSA: Identity mapping Normal L2 [%p, %p)\n", l2_idx * L2_ENTRY_SIZE, (l2_idx + 1) * L2_ENTRY_SIZE);
       }
     } else {
       kpanic("Identity map with 4K pages is not implemented yet\n");
-      kassert(region->_size % L3_ENTRY_SIZE == 0, "Invalid alignment/size of ram region: %z\n", region->_size);
+      kassert(region->_size % L3EntrySize == 0, "Invalid alignment/size of ram region: %z\n", region->_size);
     }
   }
 
@@ -478,7 +473,7 @@ void MMU::map_ram_identity() {
 
   for (uint32_t i = 0; i < device_regions->_num_regions; i++) {
     const Memory::Region* region = &device_regions->_regions[i];
-    const uint64_t region_top = align_up(region->_start + region->_size, L3_ENTRY_SIZE);
+    const uint64_t region_top = align_up(region->_start + region->_size, L3EntrySize);
     if (region_top > highest_region) {
       highest_region = region_top;
     }
@@ -490,20 +485,20 @@ void MMU::map_ram_identity() {
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
   setup_core_specific();
 
-  Memory::allocate_virtual_global(highest_region / L3_ENTRY_SIZE);
+  Memory::allocate_virtual_global(highest_region / L3EntrySize);
 }
 
 bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
   const uint64_t virtual_address = reinterpret_cast<uint64_t>(virtual_page);
-  if ((virtual_address % L3_ENTRY_SIZE) != 0 ||
-      (physical_frame._address % L3_ENTRY_SIZE) != 0 ||
-      virtual_address >= (1ULL << NBITS_VAS)) {
+  if ((virtual_address % L3EntrySize) != 0 ||
+      (physical_frame._address % L3EntrySize) != 0 ||
+      virtual_address >= (1ULL << NBitsVAS)) {
     return false;
   }
 
-  const uint64_t l1_idx = virtual_address / L1_ENTRY_SIZE;
-  const uint64_t l2_idx = virtual_address / L2_ENTRY_SIZE;
-  const uint64_t l3_idx = (virtual_address % L2_ENTRY_SIZE) / L3_ENTRY_SIZE;
+  const uint64_t l1_idx = virtual_address / L1EntrySize;
+  const uint64_t l2_idx = virtual_address / L2EntrySize;
+  const uint64_t l3_idx = (virtual_address % L2EntrySize) / L3EntrySize;
 
   if ((L1_ID_PAGE_TABLE[l1_idx] & 0b11) == PTE_BLOCK_TYPE) {
     return false;
@@ -538,7 +533,7 @@ bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
 
 uint64_t MMU::get_pte_for_address(uintptr_t address) {
 
-  uint32_t l1_idx = address / L1_ENTRY_SIZE;
+  uint32_t l1_idx = address / L1EntrySize;
 
   const uint64_t l1_entry = L1_ID_PAGE_TABLE[l1_idx];
   const uint64_t l1_type = l1_entry & 0b11;

@@ -37,6 +37,13 @@
 // are three types of descriptors: page descriptor (only valid for L3), table
 // descriptor (L0-L2), and block descriptor (L0-L2).
 
+constexpr uint64_t L0EntrySize = 1UL << 39;
+constexpr uint64_t L1EntrySize = 1   << 30;
+constexpr uint64_t L2EntrySize = 1   << 21;
+constexpr uint64_t L3EntrySize = 1   << 12;
+
+constexpr uint64_t NBitsVAS = 48;
+
 namespace MMU {
 
   enum class TranslationRegime {
