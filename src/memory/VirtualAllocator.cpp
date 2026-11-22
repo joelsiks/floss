@@ -1,5 +1,6 @@
 
 #include "VirtualAllocator.h"
+
 #include "util/align.h"
 #include "util/assert.h"
 
@@ -18,6 +19,10 @@ Memory::VirtualAllocator::VirtualAllocator(uint64_t size)
   : Memory::VirtualAllocator(nullptr, size) {}
 
 void* Memory::VirtualAllocator::allocate(uint64_t pages) {
+  if (pages == 0) {
+    return nullptr;
+  }
+
   SpinLockGuard guard(&_lock);
 
   void* const pages_start = _start;
@@ -33,6 +38,10 @@ void* Memory::VirtualAllocator::allocate(uint64_t pages) {
 }
 
 void Memory::VirtualAllocator::free(void* start, uint64_t pages) {
+  if (start == nullptr || pages == 0) {
+    return;
+  }
+
   SpinLockGuard guard(&_lock);
   (void)start;
   (void)pages;

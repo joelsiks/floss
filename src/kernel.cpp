@@ -56,7 +56,6 @@ extern "C" void kern_main(DeviceTree::FlattenedDeviceTree* fdt) {
 
   Memory::initialize(fdt);
   Memory::FrameAllocator::initialize();
-
   Memory::print_regions();
 
   const uint64_t el = Exception::exception_level();

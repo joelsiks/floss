@@ -3,14 +3,11 @@
 
 #include <cstdint>
 
+#include "kstdio.h"
 #include "memory/VirtualAllocator.h"
 #include "memory/map.h"
 #include "util/assert.h"
 #include "util/align.h"
-#include "kstdio.h"
-
-extern "C" char _start[];       // start of kernel image
-extern "C" char __kernel_end[]; // end of kernel image
 
 // MMU Setup:
 //  1. Configure Memory Attribute Indirection (MAIR)
@@ -79,40 +76,8 @@ void MMU::setup_mair_ranges() {
   configure_mair_range(MAIR_NORMAL_WB, MAIR_INDEX_NORMAL_WB);
 }
 
-void MMU::set_ttbr(uint64_t translation_table, TranslationRegime regime) {
-  // Translation Table Base Register (EL1) TTBR0_EL1, TTBR1_EL1.
-  // 0 is supposed to be user-space (EL0), and 1 is supposed to be kernel-space (EL1),
-  // but is gated by the upper 16 bits being either all 0s (TTRB0) or all 1s (TTBR1),
-  // not by exception level. Permission is configured separately.
-
-  // I don't think we need a strong dsb or tlbi variant here as we are setting
-  // the TTBR register(s) for the first time right now to the identity map,
-  // which should behave the same way as without the MMU/virtual memory enabled.
-  // If we were ever to update these in the future (e.g., context-switching
-  // processes), then we need to make sure that the system is coherent and views
-  // the transition as a whole.
-  switch (regime) {
-    case TranslationRegime::Lower:
-      asm volatile(
-       "msr   TTBR0_EL1, %0 \n\t\
-        isb                 \n\t\
-        "
-        :: "r"(translation_table) : "memory"
-      );
-      break;
-    case TranslationRegime::Upper:
-      asm volatile(
-       "msr   TTBR1_EL1, %0 \n\t\
-        isb                 \n\t\
-        "
-        :: "r"(translation_table) : "memory"
-      );
-      break;
-  }
-}
-
 void MMU::setup_translation_control() {
-  // TCR_EL1 is the Translation Control Register. It configures stuff like:
+  // Translation Control Register (TCR_EL1). It configures stuff like:
   //  - How many bits are used for virtual addressing
   //  - The granule size/page size
   //  - Shareability
@@ -160,7 +125,9 @@ void MMU::setup_translation_control() {
     0b01     << 8  | // IRGN0
     0b01     << 10 | // ORGN0
     0b11     << 12 | // SH0
+    0b00     << 14 | // TG0
     0b010000 << 16 | // T1SZ
+    0b00     << 30 | // TG1
     0b101ULL << 32;  // IPS
 
   asm volatile(
@@ -174,12 +141,12 @@ void MMU::setup_translation_control() {
 // MMU enable for EL1&0 stage 1 address translation
 static const uint64_t SCTLR_MMU_ENABLE = 1 << 0;
 
-// Stage 1 Cacheability control, for data accesses.
+// Stage 1 Cacheability control, for data accesses
 static const uint64_t SCTLR_CACHEABILITY_ENABLE = 1 << 2;
 
-void MMU::enable() {
-  // System Control Register (EL1)
-  // We set SCTLR_EL1.M (MMU enable for EL1&0 stage 1 address translation)
+void MMU::enable_translation() {
+  // System Control Register (EL1). We set SCTLR_EL1.M (MMU enable for EL1&0
+  // stage 1 address translation).
 
   uint64_t temp;
   asm volatile(
@@ -195,6 +162,44 @@ void MMU::enable() {
     : "i"(SCTLR_CACHEABILITY_ENABLE), "i"(SCTLR_MMU_ENABLE)
     : "memory"
   );
+}
+
+void MMU::set_ttbr(uint64_t translation_table, TranslationRegime regime) {
+  // Translation Table Base Register (EL1) TTBR0_EL1, TTBR1_EL1.
+  //
+  // We are mapping the lower half for processes (user-space), and the upper
+  // half for the kernel (kernel-space). The half is selected by the upper 16
+  // bits of the virtual address. If the upper 16 bits are all 0s, TTBR0 is used.
+  // If the upper 16 bits are all 1s, TTBR1 is used.
+  //
+  // Even though we are separating user- vs. kernel-space this way, permission
+  // is configured separately in the translation/page tables.
+
+  // I don't think we need a strong dsb or tlbi variant here as we are setting
+  // the TTBR register(s) for the first time right now to the identity map,
+  // which should behave the same way as without the MMU/virtual memory enabled.
+  // If we were ever to update these in the future (e.g., context-switching
+  // processes), then we need to make sure that the system is coherent and views
+  // the transition as a whole.
+
+  switch (regime) {
+    case TranslationRegime::Lower:
+      asm volatile(
+       "msr   TTBR0_EL1, %0 \n\t\
+        isb                 \n\t\
+        "
+        :: "r"(translation_table) : "memory"
+      );
+      break;
+    case TranslationRegime::Upper:
+      asm volatile(
+       "msr   TTBR1_EL1, %0 \n\t\
+        isb                 \n\t\
+        "
+        :: "r"(translation_table) : "memory"
+      );
+      break;
+  }
 }
 
 typedef uint64_t PageTableEntry;
@@ -214,7 +219,7 @@ void MMU::setup_core_specific() {
 
   setup_translation_control();
 
-  enable();
+  enable_translation();
 }
 
 static PageTableEntry* allocate_l3_page_table() {
@@ -564,4 +569,3 @@ uint64_t MMU::get_pte_for_address(uintptr_t address) {
 
   return 0;
 }
-
