@@ -288,7 +288,7 @@ static void pte_set_mair_attr(PageTableEntry* pte, uint32_t mair_id) {
   *pte |= mair_id << 2;
 }
 
-static void pte_point_to_next_level(PageTableEntry* pte, PageTableEntry* next_pte) {
+static inline void pte_point_to_next_level(PageTableEntry* pte, PageTableEntry* next_pte) {
   kassert((~(0xFFFFFFFFFULL << 12) & (uint64_t)next_pte) == 0, "bad bits are set");
 
   // Next-level table address[47:m], with m = 12 for 4KB granule
@@ -297,36 +297,40 @@ static void pte_point_to_next_level(PageTableEntry* pte, PageTableEntry* next_pt
   *pte |= (uint64_t)next_pte;
 }
 
-static void pte_point_to_offset(PageTableEntry* pte, uint64_t offset) {
+static inline void pte_point_to_offset(PageTableEntry* pte, uint64_t offset) {
   kassert((offset & 0xFFF) == 0, "offset must be aligned to 4K: %x\n", offset);
   // Output address[47:n]
   // For the 4KB granule size, the level 1 descriptor n is 30, and the level 2 descriptor n is 21.
   *pte |= (uint64_t)offset;
 }
 
-static void pte_mark_as_table_descriptor(PageTableEntry* pte) {
+static inline PageTableEntry* pte_next_level(const PageTableEntry* pte, uint64_t next_idx) {
+  return &reinterpret_cast<PageTableEntry*>(reinterpret_cast<uint64_t>(*pte) & PTE_ADDR_MASK)[next_idx];
+}
+
+static inline void pte_mark_as_table_descriptor(PageTableEntry* pte) {
   *pte |= PTE_TABLE_TYPE;
 }
 
-static void pte_mark_as_block_descriptor_normal(PageTableEntry* pte) {
+static inline void pte_mark_as_block_descriptor_normal(PageTableEntry* pte) {
   *pte |= PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
           PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
           PTE_BLOCK_TYPE;
 }
 
-static void pte_mark_as_page_descriptor_normal(PageTableEntry* pte) {
+static inline void pte_mark_as_page_descriptor_normal(PageTableEntry* pte) {
   *pte |= PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_ACCESS |
           PTE_LA_AF | PTE_LA_SH_INNER | PTE_LA_AP_RW_EL1 |
           PTE_PAGE_TYPE;
 }
 
-static void pte_mark_as_block_descriptor_device(PageTableEntry* pte) {
+static inline void pte_mark_as_block_descriptor_device(PageTableEntry* pte) {
   *pte |= PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_NO_ACCESS |
           PTE_LA_AF | PTE_LA_SH_NONE | PTE_LA_AP_RW_EL1 |
           PTE_BLOCK_TYPE;
 }
 
-static void pte_mark_as_page_descriptor_device(PageTableEntry* pte) {
+static inline void pte_mark_as_page_descriptor_device(PageTableEntry* pte) {
   *pte |= PTE_UA_UXN_EL0_NO_ACCESS | PTE_UA_PXN_EL1_NO_ACCESS |
           PTE_LA_AF | PTE_LA_SH_NONE | PTE_LA_AP_RW_EL1 |
           PTE_PAGE_TYPE;
@@ -498,17 +502,19 @@ void MMU::map_ram_identity() {
   // TODO: The Access Flag should not be set here once exceptions are set up handling page faults
   setup_core_specific();
 
-  Memory::kernel_virtual_alloc(align_up(highest_region, L3EntrySize));
+  Memory::kernel_virtual_alloc(align_up(highest_region, L3EntrySize) / L3EntrySize);
 }
 
-static PageTableEntry allocate_page_table() {
+static bool allocate_page_table(PageTableEntry& page_table) {
   // Allocate one physical frame for the page table
   Memory::Frame physical_frame;
   if (!Memory::FrameAllocator::allocate_frame(&physical_frame)) {
-    return 0;
+    return false;
   }
 
-  return reinterpret_cast<PageTableEntry>(physical_frame._address);
+  page_table = reinterpret_cast<PageTableEntry>(physical_frame._address);
+
+  return true;
 }
 
 static void zero_page_table(PageTableEntry* page_table) {
@@ -516,34 +522,116 @@ static void zero_page_table(PageTableEntry* page_table) {
   memset(reinterpret_cast<void*>(page_table), 0, 4096);
 }
 
-static void ensure_l0_entry(uint64_t idx) {
+static bool allocate_page_table_and_point_pte(PageTableEntry* pte_pointing_at) {
+    // Allocate a new page table
+    PageTableEntry new_page_table;
+    if (!allocate_page_table(new_page_table)) {
+      return false;
+    }
+
+    zero_page_table(reinterpret_cast<PageTableEntry*>(new_page_table));
+
+    pte_mark_as_table_descriptor(pte_pointing_at);
+    pte_point_to_next_level(pte_pointing_at, reinterpret_cast<PageTableEntry*>(new_page_table));
+
+    return true;
+}
+
+static bool ensure_l0_entry(MMU::TranslationRegime regime) {
+  kprecond(regime == MMU::TranslationRegime::Upper);
+
   if (KernelPageTableBase == 0) {
     // Allocate a new page table for the L0 level. We only ever need one so when
     // this is allocated it won't have to be done again. The L0 entry covers
     // 512 * 512 GiB = 256 TiB, and we only have 128 TiB to cover, since the VAS
     // is split into lower/upper half of 128 TiB each.
 
-    PageTableEntry page_table = allocate_page_table();
-    TTBR1EL1Value = page_table;
-    KernelPageTableBase = reinterpret_cast<PageTableEntry*>(page_table);
+    PageTableEntry base_page_table;
+    if (!allocate_page_table(base_page_table)) {
+      return false;
+    }
+
+    TTBR1EL1Value = base_page_table;
+    KernelPageTableBase = reinterpret_cast<PageTableEntry*>(base_page_table);
+
+    // Update the TTBR value
+    MMU::set_ttbr(base_page_table, regime);
 
     // Zero-initialize the entire page we just allocated so that all page table
     // entries on it will become invalid
-    zero_page_table(&page_table);
+    zero_page_table(reinterpret_cast<PageTableEntry*>(base_page_table));
   }
 
   kprecond(KernelPageTableBase != nullptr);
-
-  PageTableEntry* const pte = &KernelPageTableBase[idx];
-
-  if (!pte_is_valid(pte)) {
-    pte_mark_as_table_descriptor(pte);
-  }
+  return true;
 }
 
-static void ensure_l1_entry() {}
-static void ensure_l2_entry() {}
-static void ensure_l3_entry() {}
+static bool ensure_l1_entry(uint64_t l0_idx) {
+  kprecond(KernelPageTableBase != nullptr);
+
+  PageTableEntry* const base_page_table = KernelPageTableBase;
+
+  PageTableEntry* const l0_pte = &base_page_table[l0_idx];
+  if (!pte_is_valid(l0_pte)) {
+    return allocate_page_table_and_point_pte(l0_pte);
+  }
+
+  return true;
+}
+
+static bool ensure_l2_entry(uint64_t l0_idx, uint64_t l1_idx) {
+  kprecond(KernelPageTableBase != nullptr);
+
+  PageTableEntry* const base_page_table = KernelPageTableBase;
+
+  PageTableEntry* const l0_pte = &base_page_table[l0_idx];
+  kprecond(pte_is_valid(l0_pte));
+
+  PageTableEntry* const l1_pte = pte_next_level(l0_pte, l1_idx);
+  if (!pte_is_valid(l1_pte)) {
+    return allocate_page_table_and_point_pte(l1_pte);
+  }
+
+  return true;
+}
+
+static bool ensure_l3_entry(uint64_t l0_idx, uint64_t l1_idx, uint64_t l2_idx) {
+  kprecond(KernelPageTableBase != nullptr);
+
+  PageTableEntry* const l0_page_table = KernelPageTableBase;
+
+  PageTableEntry* const l0_pte = &l0_page_table[l0_idx];
+  kprecond(pte_is_valid(l0_pte));
+
+  PageTableEntry* const l1_pte = pte_next_level(l0_pte, l1_idx);
+  kprecond(pte_is_valid(l1_pte));
+
+  PageTableEntry* const l2_pte = pte_next_level(l1_pte, l2_idx);
+  if (!pte_is_valid(l2_pte)) {
+    return allocate_page_table_and_point_pte(l2_pte);
+  }
+
+  return true;
+}
+
+static PageTableEntry* get_l3_pte(uint64_t l0_idx, uint64_t l1_idx, uint64_t l2_idx, uint64_t l3_idx) {
+  kprecond(KernelPageTableBase != nullptr);
+
+  PageTableEntry* const l0_page_table = KernelPageTableBase;
+
+  PageTableEntry* const l0_pte = &l0_page_table[l0_idx];
+  kprecond(pte_is_valid(l0_pte));
+
+  PageTableEntry* const l1_pte = pte_next_level(l0_pte, l1_idx);
+  kprecond(pte_is_valid(l1_pte));
+
+  PageTableEntry* const l2_pte = pte_next_level(l1_pte, l2_idx);
+  kprecond(pte_is_valid(l2_pte));
+
+  PageTableEntry* const l3_pte = pte_next_level(l2_pte, l3_idx);
+
+  return l3_pte;
+}
 
 static const uint64_t uppermask = 0x0000ffffffffffff;
 
@@ -566,74 +654,22 @@ bool MMU::map_page(Memory::Frame physical_frame, void *virtual_page) {
   }
 
   const uint64_t l0_idx = virtual_address / L0EntrySize;
-  ensure_l0_entry(l0_idx);
-
-  const uint64_t l1_idx = virtual_address / L1EntrySize;
-  const uint64_t l2_idx = virtual_address / L2EntrySize;
+  const uint64_t l1_idx = (virtual_address % L0EntrySize) / L1EntrySize;
+  const uint64_t l2_idx = (virtual_address % L1EntrySize) / L2EntrySize;
   const uint64_t l3_idx = (virtual_address % L2EntrySize) / L3EntrySize;
 
+  if (!ensure_l0_entry(regime)) return false;
+  if (!ensure_l1_entry(l0_idx)) return false;
+  if (!ensure_l2_entry(l0_idx, l1_idx)) return false;
+  if (!ensure_l3_entry(l0_idx, l1_idx, l2_idx)) return false;
 
-  if ((L1_ID_PAGE_TABLE[l1_idx] & 0b11) == PTE_BLOCK_TYPE) {
-    return false;
-  }
-
-  ensure_identity_l2_page_table(l1_idx);
-  PageTableEntry* const l2_entry = identity_table_entry(L2_ID_PAGE_TABLE, l2_idx);
-  PageTableEntry* l3_table;
-
-  if (pte_is_valid(*l2_entry)) {
-    if ((*l2_entry & 0b11) != PTE_TABLE_TYPE) {
-      return false;
-    }
-    l3_table = reinterpret_cast<PageTableEntry*>(*l2_entry & PTE_ADDR_MASK);
-  } else {
-    l3_table = allocate_identity_l3_page_table();
-    *l2_entry = reinterpret_cast<uint64_t>(l3_table) | PTE_TABLE_TYPE;
-  }
-
-  PageTableEntry* const entry = identity_table_entry(l3_table, l3_idx);
-  if (pte_is_valid(*entry)) {
-    return false;
-  }
+  // Retrieve the L3 PTE
+  PageTableEntry* const l3_pte = get_l3_pte(l0_idx, l1_idx, l2_idx, l3_idx);
 
   // Point the page table entry at the physical frame and set attributes
-  pte_mark_as_page_descriptor_normal(entry);
-  pte_point_to_offset(entry, physical_frame._address);
-  pte_set_mair_attr(entry, MAIR_INDEX_NORMAL_WB);
+  pte_mark_as_page_descriptor_normal(l3_pte);
+  pte_point_to_offset(l3_pte, physical_frame._address);
+  pte_set_mair_attr(l3_pte, MAIR_INDEX_NORMAL_WB);
 
   return true;
-}
-
-uint64_t MMU::get_pte_for_address(uintptr_t address) {
-
-  uint32_t l1_idx = address / L1EntrySize;
-
-  const uint64_t l1_entry = L1_ID_PAGE_TABLE[l1_idx];
-  const uint64_t l1_type = l1_entry & 0b11;
-
-  if (l1_type == 0) {
-    return 0;
-  } else if (l1_type == PTE_BLOCK_TYPE) {
-    // If it is block type, we're done.
-    return l1_entry;
-  } else if (l1_type == PTE_TABLE_TYPE) {
-    // If it is table type, we go down a level
-
-    const uint64_t l2_entry = *(uint64_t*)(l1_entry & (0xFFFFFFFFF << 12));
-    const uint64_t l2_type = l2_entry & 0b11;
-    kprintf("Got L2 entry: %p\n", l2_entry);
-
-    if (l2_type == 0) {
-      return 0;
-    } else if (l2_type == PTE_BLOCK_TYPE) {
-      return l2_entry;
-    } else if (l2_type == PTE_TABLE_TYPE) {
-      const uint64_t l3_entry = *(uint64_t*)(l2_entry & (0xFFFFFFFFF << 12));
-      kprintf("Got L3 entry: %p\n", l3_entry);
-
-      return l3_entry;
-    }
-  }
-
-  return 0;
 }

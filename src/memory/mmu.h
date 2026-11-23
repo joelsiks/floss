@@ -36,6 +36,9 @@
 // A page table entry in a page table is marked as one specific descriptor. There
 // are three types of descriptors: page descriptor (only valid for L3), table
 // descriptor (L0-L2), and block descriptor (L0-L2).
+//
+// Sizes for entries in different table levels:
+// L0 = 512 GiB, L1 = 1 GiB, L2 = 2 MiB, L3 = 4 KiB
 
 constexpr uint64_t L0EntrySize = 1UL << 39;
 constexpr uint64_t L1EntrySize = 1   << 30;
